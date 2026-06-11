@@ -7,6 +7,7 @@ import {
   type Instrument,
   type InstrumentCategory,
 } from "./config";
+import { InstrumentIcon } from "./InstrumentIcon";
 
 interface InstrumentSelectorProps {
   currentInstrument: Instrument;
@@ -87,7 +88,7 @@ export function InstrumentSelector({ currentInstrument, onSelect }: InstrumentSe
 
   return (
     <div ref={dropdownRef} style={{ position: "relative" }}>
-      {/* Trigger Button */}
+      {/* ── Trigger Button ─────────────────────────────────────────────────── */}
       <button
         onClick={() => setIsOpen(!isOpen)}
         style={{
@@ -117,12 +118,13 @@ export function InstrumentSelector({ currentInstrument, onSelect }: InstrumentSe
           }
         }}
       >
-        <span style={{ fontSize: 14 }}>{currentInstrument.icon}</span>
+        {/* ✅ INTEGRATED: InstrumentIcon menggantikan emoji di trigger button */}
+        <InstrumentIcon instrument={currentInstrument} size={18} />
         <span>{currentInstrument.symbol}</span>
         <span style={{ fontSize: 10, color: T.dim }}>▾</span>
       </button>
 
-      {/* Dropdown Panel */}
+      {/* ── Dropdown Panel ─────────────────────────────────────────────────── */}
       {isOpen && (
         <div
           style={{
@@ -272,21 +274,26 @@ export function InstrumentSelector({ currentInstrument, onSelect }: InstrumentSe
                       }
                     }}
                   >
-                    {/* Icon */}
+                    {/* ✅ INTEGRATED: InstrumentIcon menggantikan div+emoji di list */}
                     <div
                       style={{
-                        width: 32,
-                        height: 32,
+                        width: 36,
+                        height: 36,
                         borderRadius: "50%",
                         display: "flex",
                         alignItems: "center",
                         justifyContent: "center",
-                        background: "rgba(255,255,255,0.08)",
-                        fontSize: 14,
+                        // Background hanya untuk emoji (commodities/indices)
+                        // Crypto/forex/stock punya gambar sendiri, tidak butuh bg
+                        background:
+                          instrument.category === "commodities" ||
+                          instrument.category === "indices"
+                            ? "rgba(255,255,255,0.08)"
+                            : "transparent",
                         flexShrink: 0,
                       }}
                     >
-                      {instrument.icon}
+                      <InstrumentIcon instrument={instrument} size={28} />
                     </div>
 
                     {/* Info */}
