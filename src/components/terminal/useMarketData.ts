@@ -6,6 +6,8 @@ import { TF_MAP, HTF_MAP } from "./constants";
 import { API_CONFIG, TRADING_CONFIG, UPDATE_INTERVALS, INSTRUMENTS, DEFAULT_INSTRUMENT_ID } from "./config";
 import { calcEMA } from "./indicators";
 import { getUIC } from "../../lib/saxo-uic-cache";
+import { getAccessToken } from "../../lib/saxo-auth";
+import { connectSaxoStream as connectSaxoStreamExternal } from "./connectSaxoStream";
 
 // VERSION CHECK - If you see this in browser console, code is loaded correctly
 console.log("🔄 [useMarketData] Version: 2024-DYNAMIC-UIC-v2 loaded");
@@ -337,6 +339,7 @@ export function useMarketData(instrumentId: string = DEFAULT_INSTRUMENT_ID) {
           await fetchSaxoPriceInfo(instrument);
           
           // Connect to real-time stream
+          // Token validation sudah di-handle dalam connectSaxoStream
           if (mountedRef.current) {
             await connectSaxoStream();
           }
@@ -366,6 +369,8 @@ export function useMarketData(instrumentId: string = DEFAULT_INSTRUMENT_ID) {
           mountedRef.current = false;
           clearInterval(saxoPriceInterval);
           if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
+          
+          // Cleanup WebSocket for Saxo
           if (wsRef.current) {
             wsRef.current.onclose = null;
             wsRef.current.close();
@@ -414,22 +419,14 @@ export function useMarketData(instrumentId: string = DEFAULT_INSTRUMENT_ID) {
 
   // ── Saxo Data Fetching ────────────────────────────────────────────────────────
   const fetchSaxoCandles = async (tf: string, instr: typeof instrument) => {
-    // Get access token
-    const tokensStr = localStorage.getItem("saxo_tokens");
-    if (!tokensStr) {
-      throw new Error("Not authenticated. Please login with Saxo using the LOGIN button.");
-    }
-
-    let tokens;
-    try {
-      tokens = JSON.parse(tokensStr);
-    } catch {
-      throw new Error("Invalid token data. Please login again.");
-    }
-
-    const accessToken = tokens.access_token;
+    // Ambil access token — user token (kalau sudah login) atau guest/demo token
+    const accessToken = await getAccessToken();
     if (!accessToken) {
-      throw new Error("No access token found. Please login with Saxo.");
+      throw new Error(
+        "Market data tidak tersedia. " +
+        "Tambahkan SAXO_DEMO_REFRESH_TOKEN di .env.local untuk akses publik, " +
+        "atau login dengan akun Saxo."
+      );
     }
 
     // DYNAMIC UIC LOOKUP: selalu coba dynamic (cache/API) dulu, hardcoded hanya fallback terakhir
@@ -670,13 +667,10 @@ export function useMarketData(instrumentId: string = DEFAULT_INSTRUMENT_ID) {
   };
 
   const fetchSaxoPriceInfo = async (instr: typeof instrument) => {
-    // Dynamic UIC lookup
-    const tokensStr = localStorage.getItem("saxo_tokens");
-    if (!tokensStr) return;
+    // Ambil access token — user atau guest
+    const accessToken = await getAccessToken();
+    if (!accessToken) return; // skip silently
 
-    const tokens = JSON.parse(tokensStr);
-    const accessToken = tokens.access_token;
-    
     let uic: number | undefined;
     let resolvedAssetType: string | undefined;
     if (instr.searchKeywords && instr.assetType) {
@@ -737,15 +731,17 @@ export function useMarketData(instrumentId: string = DEFAULT_INSTRUMENT_ID) {
   };
 
   const connectSaxoStream = async () => {
-    // NOTE: Saxo WebSocket streaming requires different authentication method
-    // OAuth bearer tokens cannot be passed via WebSocket URL
-    // For now, we'll rely on polling via Price API instead
-    console.warn("[Saxo WS] WebSocket streaming not implemented - using Price API polling instead");
-    
-    // Saxo WebSocket requires special setup that's beyond OAuth flow
-    // Would need to use streaming context and proper authentication
-    // For MVP, we use REST API polling which works fine
-    return;
+    // Gunakan implementasi eksternal yang benar (binary WebSocket dengan token di URL)
+    await connectSaxoStreamExternal({
+      instrument,
+      selectedTf,
+      tfRef,
+      mountedRef,
+      wsRef,
+      reconnectTimer,
+      setState,
+      prevPriceRef,
+    });
   };
 
   // ── Public API ────────────────────────────────────────────────────────────

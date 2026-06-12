@@ -4,33 +4,39 @@ const SAXO_API_URL = process.env.NEXT_PUBLIC_SAXO_ENVIRONMENT === "LIVE"
   ? "https://gateway.saxobank.com/openapi"
   : "https://gateway.saxobank.com/sim/openapi";
 
+/**
+ * POST — Buat chart subscription untuk WebSocket streaming
+ * Harus dipanggil SETELAH WebSocket sudah terconnect
+ */
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { accessToken, uic, assetType, contextId } = body;
+    const { accessToken, uic, assetType, contextId, referenceId, horizon, accountKey } = body;
 
-    if (!accessToken || !uic || !assetType || !contextId) {
+    if (!accessToken || !uic || !assetType || !contextId || !referenceId || !accountKey) {
       return NextResponse.json(
-        { error: "Missing required parameters" },
+        { error: "Missing required parameters", required: ["accessToken","uic","assetType","contextId","referenceId","accountKey"] },
         { status: 400 }
       );
     }
 
-    // Create price subscription for Chart v3
     const subscriptionBody = {
       ContextId: contextId,
-      ReferenceId: `chart_${uic}_${Date.now()}`,
+      ReferenceId: referenceId,
       Arguments: {
-        Uic: parseInt(uic),
+        AccountKey: accountKey,
+        Uic: Number(uic),
         AssetType: assetType,
-        Horizon: 1, // 1 minute for real-time updates
+        Horizon: horizon || 15,
+        Count: 1,           // Hanya butuh 1 candle terbaru untuk update real-time
+        Mode: "UpTo",
+        Time: new Date().toISOString(),
       },
     };
 
     const url = `${SAXO_API_URL}/chart/v3/charts/subscriptions`;
 
-    console.log("[Saxo Subscribe] Creating subscription:", url);
-    console.log("[Saxo Subscribe] Body:", JSON.stringify(subscriptionBody, null, 2));
+    console.log("[Saxo Subscribe] Creating subscription:", { contextId, referenceId, uic, assetType });
 
     const response = await fetch(url, {
       method: "POST",
@@ -50,57 +56,63 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const data = await response.json();
-    console.log("[Saxo Subscribe] Success:", data);
-    return NextResponse.json(data);
+    // 201 Created — Location header berisi URL untuk unsubscribe nanti
+    const locationHeader = response.headers.get("Location");
+    let data = {};
+    try {
+      data = await response.json();
+    } catch {
+      // 201 mungkin tidak ada body
+    }
+
+    console.log("[Saxo Subscribe] ✅ Success, referenceId:", referenceId, "location:", locationHeader);
+
+    return NextResponse.json(
+      { ...data, referenceId, location: locationHeader },
+      { status: 201 }
+    );
   } catch (error) {
     console.error("[Saxo Subscribe] Exception:", error);
     return NextResponse.json(
-      { error: "Internal server error", message: error instanceof Error ? error.message : "Unknown error" },
+      { error: "Internal server error", message: error instanceof Error ? error.message : "Unknown" },
       { status: 500 }
     );
   }
 }
 
-// DELETE method to remove subscription
+/**
+ * DELETE — Hapus subscription tertentu
+ */
 export async function DELETE(request: NextRequest) {
   try {
     const body = await request.json();
     const { accessToken, contextId, referenceId } = body;
 
     if (!accessToken || !contextId || !referenceId) {
-      return NextResponse.json(
-        { error: "Missing required parameters" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "Missing parameters" }, { status: 400 });
     }
 
     const url = `${SAXO_API_URL}/chart/v3/charts/subscriptions/${contextId}/${referenceId}`;
 
-    console.log("[Saxo Unsubscribe] Deleting:", url);
+    console.log("[Saxo Unsubscribe]", url);
 
     const response = await fetch(url, {
       method: "DELETE",
-      headers: {
-        "Authorization": `Bearer ${accessToken}`,
-      },
+      headers: { "Authorization": `Bearer ${accessToken}` },
     });
 
-    if (!response.ok) {
+    if (!response.ok && response.status !== 404) {
       const errorText = await response.text();
-      console.error("[Saxo Unsubscribe] Error:", response.status, errorText);
       return NextResponse.json(
         { error: `Saxo API error: ${response.status}`, details: errorText },
         { status: response.status }
       );
     }
 
-    console.log("[Saxo Unsubscribe] Success");
     return NextResponse.json({ success: true });
   } catch (error) {
-    console.error("[Saxo Unsubscribe] Exception:", error);
     return NextResponse.json(
-      { error: "Internal server error", message: error instanceof Error ? error.message : "Unknown error" },
+      { error: "Internal server error", message: error instanceof Error ? error.message : "Unknown" },
       { status: 500 }
     );
   }

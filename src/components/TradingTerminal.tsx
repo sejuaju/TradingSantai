@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState, useEffect } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { AnalyticsBoard }      from "./terminal/AnalyticsBoard";
 import { AgentSidebar }        from "./terminal/AgentSidebar";
 import { TopInfoBar }          from "./terminal/TopInfoBar";
@@ -226,23 +226,22 @@ export default function TradingTerminal() {
   const terminalRef                     = useRef<HTMLDivElement>(null);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const searchParams = useSearchParams();
-  
-  // Get initial instrument from URL or use default
+
+  // ✅ FIX 1: Tambah router untuk update URL saat instrument berubah
+  const router = useRouter();
+
+  // Baca instrument dari URL — jadi sumber kebenaran saat refresh
   const initialInstrument = searchParams?.get("instrument");
   const [instrumentId, setInstrumentId] = useState<string>(() => {
-    // Initialize state with URL parameter if valid, otherwise use default
-    return (initialInstrument && INSTRUMENTS[initialInstrument]) ? initialInstrument : DEFAULT_INSTRUMENT_ID;
+    return (initialInstrument && INSTRUMENTS[initialInstrument])
+      ? initialInstrument
+      : DEFAULT_INSTRUMENT_ID;
   });
 
-  // Clear URL parameter after component mount (without triggering state update)
-  useEffect(() => {
-    const instrumentFromUrl = searchParams?.get("instrument");
-    if (instrumentFromUrl && typeof window !== "undefined") {
-      console.log("[TradingTerminal] Instrument from URL:", instrumentFromUrl);
-      // Clear URL parameter only
-      window.history.replaceState({}, "", window.location.pathname);
-    }
-  }, [searchParams]);
+  // ✅ FIX 2: HAPUS useEffect yang membersihkan URL
+  // Kode lama salah karena menghapus ?instrument= dari URL,
+  // sehingga refresh selalu kembali ke default.
+  // URL sekarang dipertahankan dan diupdate saat instrument berubah.
 
   const {
     candles, currentPrice, priceChange,
@@ -252,8 +251,11 @@ export default function TradingTerminal() {
     switchTimeframe, instrument,
   } = useMarketData(instrumentId);
 
+  // ✅ FIX 3: Simpan pilihan instrument ke URL saat user ganti instrument
   const handleInstrumentChange = (newInstrument: Instrument) => {
     setInstrumentId(newInstrument.id);
+    // Update URL tanpa reload halaman — dipertahankan saat refresh
+    router.replace(`/?instrument=${newInstrument.id}`, { scroll: false });
   };
 
   const {

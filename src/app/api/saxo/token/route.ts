@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { saveDemoTokenIfNotExists } from "@/lib/saxo-demo-token";
 
 // Server-side token exchange (secure, no CORS issues)
 export async function POST(request: NextRequest) {
@@ -56,6 +57,18 @@ export async function POST(request: NextRequest) {
     }
 
     const tokens = await response.json();
+
+    // Auto-save refresh token sebagai demo token jika belum ada.
+    // Login pertama = demo token otomatis terkonfigurasi — pengunjung bisa
+    // lihat data market tanpa perlu login sendiri.
+    if (tokens.refresh_token) {
+      try {
+        saveDemoTokenIfNotExists(tokens.refresh_token);
+      } catch (err) {
+        // Jangan gagalkan login hanya karena demo token save gagal
+        console.warn("[Token] Could not save demo token:", err);
+      }
+    }
 
     // Return tokens to client
     return NextResponse.json(tokens);

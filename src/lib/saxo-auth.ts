@@ -267,3 +267,39 @@ export async function saxoFetch(
 
   return response;
 }
+
+/**
+ * getAccessToken
+ *
+ * Coba ambil access token dengan urutan prioritas:
+ *  1. Token user (dari localStorage setelah login personal)
+ *  2. Guest/demo token (dari server, pakai credentials pemilik app)
+ *
+ * Dengan ini pengunjung bisa lihat data market TANPA harus login.
+ * Login tetap tersedia untuk fitur personal (akun, order, dll).
+ */
+export async function getAccessToken(): Promise<string | null> {
+  // 1. Coba token user dulu (paling prioritas)
+  const userTokens = getStoredTokens();
+  if (userTokens?.access_token) {
+    return userTokens.access_token;
+  }
+
+  // 2. Fallback ke guest/demo token (server-side)
+  if (typeof window === "undefined") return null; // server-side render, skip
+
+  try {
+    const res = await fetch("/api/saxo/guest-token");
+    if (res.ok) {
+      const data = await res.json();
+      if (data.accessToken) {
+        console.log("[Saxo] Using demo/guest token for market data");
+        return data.accessToken;
+      }
+    }
+  } catch {
+    // Guest token tidak tersedia — tidak apa-apa, return null
+  }
+
+  return null;
+}

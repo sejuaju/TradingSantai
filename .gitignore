@@ -34,6 +34,9 @@ yarn-error.log*
 .env*
 !.env.local.example
 
+# Saxo demo token (auto-generated, contains sensitive credentials)
+.saxo-demo-token.json
+
 # vercel
 .vercel
 
