@@ -747,12 +747,22 @@ export function useMarketData(instrumentId: string = DEFAULT_INSTRUMENT_ID) {
   // ── Public API ────────────────────────────────────────────────────────────
   const switchTimeframe = async (tf: string) => {
     setSelectedTf(tf);
+    tfRef.current = tf; // ✅ Update ref langsung — connectSaxoStream baca ini untuk horizon
     setState(prev => ({ ...prev, isLoading: true }));
     
     if (instrument.broker === "SAXO") {
       // Saxo: fetch new candles for the timeframe
       try {
         await fetchSaxoCandles(tf, instrument);
+        // ✅ FIX: Tutup WS lama & reconnect dengan horizon baru
+        if (wsRef.current) {
+          wsRef.current.onclose = null;
+          wsRef.current.close(1000, "TF switch");
+          wsRef.current = null;
+        }
+        if (mountedRef.current) {
+          await connectSaxoStream();
+        }
       } catch (error) {
         console.error("Failed to switch Saxo timeframe:", error);
       }

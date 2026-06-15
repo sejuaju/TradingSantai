@@ -9,6 +9,16 @@ import { getUIC } from "../../lib/saxo-uic-cache";
 import { getAccessToken } from "../../lib/saxo-auth";
 
 // ─── Binary Message Decoder ───────────────────────────────────────────────────
+//
+// Format binary Saxo yang BENAR (per dokumentasi OpenAPI):
+// [MessageId: 8 byte Int64LE]
+// [Reserved:  2 byte — HARUS DISKIP]
+// [RefIdLen:  1 byte UInt8]
+// [RefId:     n byte ASCII]
+// [PayloadFmt:1 byte UInt8  (0=JSON, 1=Protobuf)]
+// [PayloadSz: 4 byte Int32LE]
+// [Payload:   m byte]
+//
 interface SaxoStreamMessage {
   messageId: number;
   referenceId: string;
@@ -21,31 +31,39 @@ export function decodeSaxoMessages(buffer: ArrayBuffer): SaxoStreamMessage[] {
   let offset = 0;
 
   while (offset < buffer.byteLength) {
-    // Message ID: 8 bytes
+    // Header minimum: 8 + 2 + 1 + 1 + 4 = 16 bytes
+    if (offset + 16 > buffer.byteLength) break;
+
+    // ─ MessageId: 8 bytes (Int64LE — ambil lower 32 bits cukup untuk logging)
     const messageId = view.getUint32(offset, true);
     offset += 8;
-    if (offset >= buffer.byteLength) break;
 
-    // Reference ID length: 2 bytes
-    const refIdLen = view.getUint16(offset, true);
+    // ─ Reserved: 2 bytes — SKIP (kode lama salah membaca ini sebagai refIdLen!)
     offset += 2;
 
-    // Reference ID
+    // ─ Reference ID Size: 1 byte UInt8 (kode lama pakai getUint16 = 2 bytes, SALAH)
+    const refIdLen = view.getUint8(offset);
+    offset += 1;
+
+    // ─ Reference ID: refIdLen bytes
+    if (offset + refIdLen > buffer.byteLength) break;
     const refIdBytes = new Uint8Array(buffer, offset, refIdLen);
     const referenceId = new TextDecoder().decode(refIdBytes);
     offset += refIdLen;
 
-    // Payload format: 2 bytes (0 = JSON)
-    const payloadFormat = view.getUint16(offset, true);
-    offset += 2;
+    // ─ Payload Format: 1 byte UInt8 (kode lama pakai getUint16 = 2 bytes, SALAH)
+    if (offset + 1 > buffer.byteLength) break;
+    const payloadFormat = view.getUint8(offset);
+    offset += 1;
 
-    // Payload size: 4 bytes
+    // ─ Payload Size: 4 bytes Int32LE ← sudah benar
+    if (offset + 4 > buffer.byteLength) break;
     const payloadSize = view.getUint32(offset, true);
     offset += 4;
 
-    // Payload
+    // ─ Payload
     let payload: Record<string, unknown> | null = null;
-    if (payloadSize > 0 && payloadFormat === 0) {
+    if (payloadSize > 0 && payloadFormat === 0 && offset + payloadSize <= buffer.byteLength) {
       const payloadBytes = new Uint8Array(buffer, offset, payloadSize);
       try {
         payload = JSON.parse(new TextDecoder().decode(payloadBytes));
@@ -304,12 +322,16 @@ export async function connectSaxoStream({
   ws.onmessage = (event) => {
     const buffer = event.data as ArrayBuffer;
     if (!(buffer instanceof ArrayBuffer)) {
-      console.warn("[Saxo WS] Non-binary message");
+      console.warn("[Saxo WS] ⚠️ Non-binary message, type:", typeof event.data, "— pastikan binaryType='arraybuffer' di-set sebelum onmessage");
       return;
     }
 
+    // Debug: konfirmasi pesan benar-benar diterima
+    console.log(`[Saxo WS] 📨 Binary message received, bytes: ${buffer.byteLength}`);
+
     try {
       const messages = decodeSaxoMessages(buffer);
+      console.log(`[Saxo WS] Decoded ${messages.length} message(s):`, messages.map(m => ({ refId: m.referenceId, hasPayload: !!m.payload })));
 
       for (const msg of messages) {
         // ── Control messages ──────────────────────────────────────────────
