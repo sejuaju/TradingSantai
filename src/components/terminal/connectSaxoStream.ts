@@ -244,7 +244,40 @@ export async function connectSaxoStream({
   // ✅ Log initial connection attempt
   console.log(`[Saxo WS ${connectionId}] WebSocket created, readyState:`, ws.readyState, "(0=CONNECTING)");
 
+  // ✅ FIX: Watchdog anti-zombie connection.
+  // Setelah laptop sleep / ganti network / NAT timeout, koneksi TCP di belakang
+  // WebSocket bisa mati TANPA browser pernah memanggil onclose — readyState tetap
+  // melaporkan OPEN selamanya ("half-open"), atau macet selamanya di CONNECTING
+  // kalau matinya terjadi saat handshake. Tanpa watchdog ini, satu-satunya cara
+  // recover adalah refresh manual halaman. Saxo kirim heartbeat tiap ~15-20 detik;
+  // kalau tidak ada aktivitas (heartbeat atau data apapun) > 45 detik, atau macet
+  // di CONNECTING > 15 detik, anggap zombie dan reconnect paksa.
+  let lastActivityAt = Date.now();
+  const watchdogInterval = setInterval(() => {
+    if (wsRef.current !== ws) {
+      clearInterval(watchdogInterval); // koneksi sudah diganti yang lain, watchdog basi
+      return;
+    }
+    const idleMs = Date.now() - lastActivityAt;
+    const stuckConnecting = ws.readyState === WebSocket.CONNECTING && idleMs > 15_000;
+    const noHeartbeat = ws.readyState === WebSocket.OPEN && idleMs > 45_000;
+
+    if (stuckConnecting || noHeartbeat) {
+      console.warn(`[Saxo WS ${connectionId}] 🧟 Zombie connection (${stuckConnecting ? "stuck CONNECTING" : "no heartbeat"} ${Math.round(idleMs / 1000)}s) — forcing reconnect...`);
+      clearInterval(watchdogInterval);
+      ws.onclose = null;
+      ws.onerror = null;
+      ws.onmessage = null;
+      try { ws.close(); } catch { /* sudah mati, abaikan */ }
+      if (wsRef.current === ws) wsRef.current = null;
+      if (mountedRef.current) {
+        connectSaxoStream({ instrument, selectedTf, tfRef, mountedRef, wsRef, reconnectTimer, setState, prevPriceRef });
+      }
+    }
+  }, 10_000);
+
   ws.onopen = async () => {
+    lastActivityAt = Date.now();
     console.log(`[Saxo WS ${connectionId}] ✅ Connected, readyState:`, ws.readyState, "(1=OPEN)");
     if (mountedRef.current) {
       setState(prev => ({ ...prev, connected: true }));
@@ -294,6 +327,7 @@ export async function connectSaxoStream({
   };
 
   ws.onclose = (event) => {
+    clearInterval(watchdogInterval);
     console.log("[Saxo WS] Disconnected:", event.code, event.reason);
     if (!mountedRef.current) return;
 
@@ -320,6 +354,7 @@ export async function connectSaxoStream({
   };
 
   ws.onmessage = (event) => {
+    lastActivityAt = Date.now();
     const buffer = event.data as ArrayBuffer;
     if (!(buffer instanceof ArrayBuffer)) {
       console.warn("[Saxo WS] ⚠️ Non-binary message, type:", typeof event.data, "— pastikan binaryType='arraybuffer' di-set sebelum onmessage");

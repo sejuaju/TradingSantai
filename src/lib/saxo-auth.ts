@@ -172,6 +172,24 @@ export function isTokenExpired(): boolean {
   return tokenAge >= expiresIn - 300000;
 }
 
+// ─── Refresh Token dengan Lock (cegah race condition refresh-token-rotation) ──
+// Saxo me-rotate refresh_token setiap kali dipakai. Kalau 2 pemanggil me-refresh
+// BERSAMAAN dengan refresh_token yang sama, salah satu akan ditolak Saxo (token
+// sudah "dibakar" oleh pemanggil lain). Lock module-level ini memastikan hanya
+// SATU request refresh yang benar-benar jalan; pemanggil lain menunggu dan
+// memakai hasil yang sama.
+let refreshInFlight: Promise<SaxoTokens> | null = null;
+
+async function refreshAccessTokenLocked(refreshToken: string): Promise<SaxoTokens> {
+  if (refreshInFlight) {
+    return refreshInFlight;
+  }
+  refreshInFlight = refreshAccessToken(refreshToken).finally(() => {
+    refreshInFlight = null;
+  });
+  return refreshInFlight;
+}
+
 // ─── Get Valid Access Token (auto-refresh if needed) ──────────────────────────
 export async function getValidAccessToken(): Promise<string | null> {
   const tokens = getStoredTokens();
@@ -180,7 +198,7 @@ export async function getValidAccessToken(): Promise<string | null> {
   // Check if token needs refresh
   if (isTokenExpired()) {
     try {
-      const newTokens = await refreshAccessToken(tokens.refresh_token);
+      const newTokens = await refreshAccessTokenLocked(tokens.refresh_token);
       return newTokens.access_token;
     } catch (error) {
       console.error("Failed to refresh token:", error);
@@ -272,17 +290,39 @@ export async function saxoFetch(
  * getAccessToken
  *
  * Coba ambil access token dengan urutan prioritas:
- *  1. Token user (dari localStorage setelah login personal)
+ *  1. Token user (dari localStorage setelah login personal) — DICEK EXPIRY + AUTO REFRESH
  *  2. Guest/demo token (dari server, pakai credentials pemilik app)
  *
  * Dengan ini pengunjung bisa lihat data market TANPA harus login.
  * Login tetap tersedia untuk fitur personal (akun, order, dll).
+ *
+ * ✅ FIX (root cause 401 berulang + WS disconnect 1006 berulang):
+ * Versi lama langsung return `userTokens.access_token` dari localStorage TANPA
+ * cek expired. Access token Saxo SIM hanya hidup ~20 menit — setelah itu semua
+ * request (price, accounts, WS auth) ditolak 401/1006 terus-menerus karena token
+ * yang SAMA (panjang string sama setiap saat di log) selalu dipakai ulang tanpa
+ * pernah di-refresh.
  */
 export async function getAccessToken(): Promise<string | null> {
   // 1. Coba token user dulu (paling prioritas)
   const userTokens = getStoredTokens();
   if (userTokens?.access_token) {
-    return userTokens.access_token;
+    if (!isTokenExpired()) {
+      return userTokens.access_token;
+    }
+
+    // Token sudah/akan expired — refresh dulu sebelum dipakai
+    try {
+      console.log("[Saxo] User access token expired, refreshing...");
+      const refreshed = await refreshAccessTokenLocked(userTokens.refresh_token);
+      console.log("[Saxo] ✅ Token refreshed, new length:", refreshed.access_token.length);
+      return refreshed.access_token;
+    } catch (error) {
+      console.error("[Saxo] ❌ Refresh gagal (refresh_token juga kadaluarsa/invalid):", error);
+      clearTokens();
+      // Jangan return null di sini — lanjut ke guest token di bawah supaya
+      // chart tetap tampil (mode guest) walau sesi personal user sudah habis.
+    }
   }
 
   // 2. Fallback ke guest/demo token (server-side)

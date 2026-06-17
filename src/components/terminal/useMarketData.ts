@@ -322,7 +322,15 @@ export function useMarketData(instrumentId: string = DEFAULT_INSTRUMENT_ID) {
     symbolRef.current = symbol;
     
     console.log("[useMarketData] Initializing for instrument:", instrument.symbol, "broker:", instrument.broker);
-    
+
+    // ✅ FIX: deklarasi di scope terluar effect (bukan di dalam initialize/async function)
+    // supaya bisa di-clear oleh SATU cleanup yang sama. Bug lama: cleanup untuk interval ini
+    // ada di dalam `initialize()` (async function) — return value-nya tidak pernah dipakai
+    // React sebagai cleanup, jadi interval BOCOR setiap kali instrument diganti / unmount.
+    // Lama-lama menumpuk banyak interval polling /api/saxo/price bersamaan untuk instrument
+    // berbeda-beda (kelihatan di console sebagai log yang ke-grouping 2x oleh Chrome).
+    let saxoPriceInterval: ReturnType<typeof setInterval> | null = null;
+
     // FIX: Async initialization - tidak langsung setState di effect body
     const initialize = async () => {
       setState(prev => ({ ...prev, isLoading: true }));
@@ -359,23 +367,17 @@ export function useMarketData(instrumentId: string = DEFAULT_INSTRUMENT_ID) {
         }
         
         // Setup price info refresh for Saxo
-        const saxoPriceInterval = setInterval(() => {
+        // ✅ FIX: assign ke variabel scope-luar (bukan `const` lokal) supaya bisa di-clear
+        saxoPriceInterval = setInterval(() => {
           if (mountedRef.current) {
             fetchSaxoPriceInfo(instrument);
           }
         }, UPDATE_INTERVALS.TICKER_24H_MS);
 
-        return () => {
-          mountedRef.current = false;
-          clearInterval(saxoPriceInterval);
-          if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-          
-          // Cleanup WebSocket for Saxo
-          if (wsRef.current) {
-            wsRef.current.onclose = null;
-            wsRef.current.close();
-          }
-        };
+        // ✅ FIX: tidak ada lagi `return () => {...}` di sini — cleanup dari async function
+        // diabaikan React (dead code), itu sebabnya interval di atas dulu selalu bocor.
+        // Cleanup sekarang ditangani SATU kali oleh return di akhir effect (di bawah).
+        return;
       }
       
       // Binance flow (original)
@@ -404,8 +406,47 @@ export function useMarketData(instrumentId: string = DEFAULT_INSTRUMENT_ID) {
       htfInterval = setInterval(() => fetchHTFTrend(tfRef.current, symbolRef.current), UPDATE_INTERVALS.HTF_TREND_MS);
     }
 
+    // ✅ FIX: recovery saat tab kembali aktif setelah lama di background. WebSocket
+    // bisa jadi "zombie" (readyState masih OPEN tapi koneksi TCP sebenarnya sudah mati —
+    // umum terjadi setelah laptop sleep, ganti network, atau NAT timeout) TANPA onclose
+    // browser pernah terpanggil. Tanpa pengecekan aktif ini, satu-satunya cara recover
+    // adalah refresh manual halaman.
+    const handleVisibilityChange = () => {
+      if (document.visibilityState !== "visible" || !mountedRef.current) return;
+
+      console.log("[useMarketData] Tab aktif kembali, verifikasi koneksi...");
+
+      if (instrument.broker === "SAXO") {
+        const wsHealthy = wsRef.current?.readyState === WebSocket.OPEN;
+        if (!wsHealthy) {
+          console.warn("[useMarketData] WS Saxo tidak sehat saat tab aktif kembali, reconnecting...");
+          if (wsRef.current) {
+            wsRef.current.onclose = null;
+            wsRef.current.onerror = null;
+            wsRef.current.close();
+            wsRef.current = null;
+          }
+          connectSaxoStream();
+        }
+        // Refetch candles untuk isi gap data selama tab tidak aktif
+        fetchSaxoCandles(tfRef.current, instrument).catch(err =>
+          console.error("[useMarketData] Gagal refetch candles setelah tab aktif:", err)
+        );
+      } else if (instrument.broker === "BINANCE") {
+        const wsHealthy = wsRef.current?.readyState === WebSocket.OPEN;
+        if (!wsHealthy) {
+          console.warn("[useMarketData] WS Binance tidak sehat saat tab aktif kembali, reconnecting...");
+          connectWS(tfRef.current, symbolRef.current);
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
     return () => {
       mountedRef.current = false;
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      if (saxoPriceInterval) clearInterval(saxoPriceInterval);
       if (tickerInterval) clearInterval(tickerInterval);
       if (htfInterval) clearInterval(htfInterval);
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
