@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { saveDemoTokenIfNotExists } from "@/lib/saxo-demo-token";
+import { setDemoRefreshToken, getDemoRefreshToken } from "@/lib/saxo-token-store";
 
 // Server-side token exchange (secure, no CORS issues)
 export async function POST(request: NextRequest) {
@@ -58,14 +58,15 @@ export async function POST(request: NextRequest) {
 
     const tokens = await response.json();
 
-    // Auto-save refresh token sebagai demo token jika belum ada.
-    // Login pertama = demo token otomatis terkonfigurasi — pengunjung bisa
-    // lihat data market tanpa perlu login sendiri.
+    // Simpan refresh token demo — pertama kali saja (jangan timpa token aktif di KV).
     if (tokens.refresh_token) {
       try {
-        saveDemoTokenIfNotExists(tokens.refresh_token);
+        const existing = await getDemoRefreshToken();
+        if (!existing) {
+          await setDemoRefreshToken(tokens.refresh_token);
+          console.log("[Token] Demo refresh token diinisialisasi dari login OAuth");
+        }
       } catch (err) {
-        // Jangan gagalkan login hanya karena demo token save gagal
         console.warn("[Token] Could not save demo token:", err);
       }
     }

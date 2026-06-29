@@ -336,11 +336,30 @@ export async function getAccessToken(): Promise<string | null> {
   // 2. Fallback ke guest/demo token (server-side)
   if (typeof window === "undefined") return null; // server-side render, skip
 
+  // Cache browser — kurangi hit /api/saxo/guest-token (penting di Vercel serverless)
+  const demoCacheKey = "saxo_demo_access_cache";
+  try {
+    const raw = sessionStorage.getItem(demoCacheKey);
+    if (raw) {
+      const cached = JSON.parse(raw) as { token: string; expiresAt: number };
+      if (cached.token && Date.now() < cached.expiresAt - 60_000) {
+        return cached.token;
+      }
+    }
+  } catch { /* ignore */ }
+
   try {
     const res = await fetch("/api/saxo/guest-token");
     if (res.ok) {
       const data = await res.json();
       if (data.accessToken) {
+        sessionStorage.setItem(
+          demoCacheKey,
+          JSON.stringify({
+            token: data.accessToken,
+            expiresAt: Date.now() + 1_100_000, // ~18 menit (access token Saxo ~20 menit)
+          }),
+        );
         console.log("[Saxo] Using demo/guest token for market data");
         return data.accessToken;
       }
