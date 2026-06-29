@@ -1,5 +1,6 @@
 "use client";
 
+import { Suspense } from "react";
 import { MessageCircle } from "lucide-react";
 import TradingTerminal from "./TradingTerminal";
 
@@ -61,7 +62,13 @@ export default function Hero() {
           className="animate-fade-in-up pb-16"
           style={{ animationDelay: "0.15s" }}
         >
-          <TradingTerminal />
+          <Suspense
+            fallback={
+              <div className="h-[520px] rounded-2xl border border-white/8 bg-[#1a1a1a] animate-pulse" />
+            }
+          >
+            <TradingTerminal />
+          </Suspense>
         </div>
 
       </div>

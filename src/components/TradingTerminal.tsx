@@ -14,6 +14,8 @@ import { useSignals }          from "./terminal/useSignals";
 import { HTF_MAP, TIMEFRAMES } from "./terminal/constants";
 import { DEFAULT_INSTRUMENT_ID, type Instrument, INSTRUMENTS } from "./terminal/config";
 
+
+
 // ─── Text colours (bright enough for #04050a background) ─────────────────────
 const T = {
   mute : "rgba(255,255,255,0.52)",
@@ -257,14 +259,12 @@ export default function TradingTerminal() {
     // Update URL tanpa reload halaman — dipertahankan saat refresh
     router.replace(`/?instrument=${newInstrument.id}`, { scroll: false });
   };
-
   const {
     signals, rsiValue,
     ema9Value, ema21Value,
     macdValue, macdSignalValue,
     scoreBreakdown,
   } = useSignals(candles, htfTrend);
-
   const macdBull = macdValue > macdSignalValue;
 
   const formatPrice = (p:number) =>
@@ -293,7 +293,7 @@ export default function TradingTerminal() {
     return () => window.removeEventListener("keydown", h);
   });
 
-  const chartH = isFullscreen ? "clamp(280px, 45vh, 440px)" : "300px";
+  const chartH = isFullscreen ? "clamp(440px, 58vh, 620px)" : "500px";
 
   const htfColor = htfTrend==="bullish" ? "#22c55e" : htfTrend==="bearish" ? "#ef4444" : T.sub;
 
@@ -327,13 +327,12 @@ export default function TradingTerminal() {
 
         {/* Status + fullscreen */}
         <div style={{ display:"flex", alignItems:"center", gap:12 }}>
-          {/* Saxo Login Button */}
           <SaxoLoginButton />
           
           <div style={{ width:1, height:16, background:"rgba(255,255,255,0.12)" }}/>
           
           <span style={{ fontFamily:"monospace", fontSize:10, fontWeight:700, color:T.dim }}>
-            OWNER
+            {"OWNER"}
           </span>
           <span style={{ fontFamily:"monospace", fontSize:10, fontWeight:700,
             color: connected ? "#4ade80" : "#f87171" }}>
@@ -364,22 +363,22 @@ export default function TradingTerminal() {
       </div>
 
       {/* ══ MAIN BODY ══════════════════════════════════════════════════════════ */}
-      <div style={{ display:"flex", flex:1, minHeight:0, overflow:"hidden" }}>
+      <div style={{ display:"flex", flex:1, width:"100%", minHeight: 0, overflow: "hidden" }}>
 
-        {/* LEFT SIDEBAR */}
-        <AgentSidebar
-          signals={signals}
-          isFullscreen={isFullscreen}
-        />
+        {(
+          <AgentSidebar
+            signals={signals}
+            isFullscreen={isFullscreen}
+          />
+        )}
 
         {/* CENTER */}
         <div className="no-scrollbar" style={{ flex:1, display:"flex",
-          flexDirection:"column", minWidth:0, overflowX:"hidden",
+          flexDirection:"column", minWidth:0, width:"100%", overflowX:"hidden",
           overflowY: isFullscreen ? "auto" : "hidden" }}>
 
           {/* Top Info Bar */}
           <TopInfoBar scoreBreakdown={scoreBreakdown} signals={signals} connected={connected}/>
-
           {/* ── Pair info bar ── */}
           <div style={{ borderBottom:"1px solid rgba(255,255,255,0.07)",
             background:"#07080f", flexShrink:0 }}>
@@ -477,15 +476,25 @@ export default function TradingTerminal() {
           </div>
 
           {/* Chart */}
-          <div style={{ height:chartH, padding:8, background:"#0d0f1a",
-            flexShrink:0, transition:"height 0.3s ease" }}>
+          <div style={{
+            height: chartH,
+            padding:"6px 8px 10px",
+            background:"#0d0f1a",
+            borderBottom:"1px solid rgba(255,255,255,0.08)",
+            flexShrink: 0,
+            transition:"height 0.3s ease",
+            
+          }}>
             {isLoading ? (
               <LoadingState broker={instrument?.broker} />
             ) : error ? (
               <ErrorState error={error} onRetry={handleRetry} />
             ) : (
-              <CandlestickChart candles={candles}
-                activeSignals={signals.filter(s=>s.status==="active")}/>
+              <CandlestickChart
+                candles={candles}
+                signals={signals}
+                viewKey={`${instrumentId}-${selectedTf}`}
+              />
             )}
           </div>
 
@@ -502,7 +511,7 @@ export default function TradingTerminal() {
             borderTop:"1px solid rgba(255,255,255,0.06)", flexShrink:0 }}>
             <div style={{ display:"flex", gap:16, fontFamily:"monospace",
               fontSize:10, letterSpacing:"0.1em", color:T.dim }}>
-              <span>{instrument?.broker || "BINANCE"} REAL-TIME</span>
+              <span>{`${instrument?.broker || "BINANCE"} REAL-TIME`}</span>
               <span>TF: {selectedTf} · HTF: {HTF_MAP[selectedTf]}</span>
               <span>EMA · MACD · RSI · VOLUME · PATTERNS</span>
             </div>
@@ -522,9 +531,12 @@ export default function TradingTerminal() {
 
         </div>
 
-        {/* RIGHT SIDEBAR */}
-        <UserMonitorSidebar signals={signals} currentPrice={currentPrice}
-          formatPrice={formatPrice} isFullscreen={isFullscreen}/>
+        <UserMonitorSidebar
+          signals={signals}
+          currentPrice={currentPrice}
+          formatPrice={formatPrice}
+          isFullscreen={isFullscreen}
+        />
 
       </div>
     </div>

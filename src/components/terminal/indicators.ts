@@ -41,7 +41,7 @@ export function calcMACD(closes: number[]): {
   return { macd: macdLine, signal: sigLine, histogram: macdLine.map((v, i) => v - sigLine[i]) };
 }
 
-export function calcATR(candles: Candle[], period = INDICATOR_CONFIG.ATR_PERIOD): number {
+export function calcATR(candles: Candle[], period: number = INDICATOR_CONFIG.ATR_PERIOD): number {
   if (candles.length < period + 1)
     return candles.length > 0 ? candles[candles.length - 1].high - candles[candles.length - 1].low : 100;
   let sum = 0;

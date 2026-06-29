@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Menu, X } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
 
 
 export default function Navbar() {
@@ -27,6 +28,12 @@ export default function Navbar() {
 
           {/* Center Nav Links - pill shaped */}
           <div className="hidden md:flex items-center gap-1 bg-[#252525] rounded-full px-1 py-1">
+            <Link
+              href="/strategy-lab"
+              className="px-5 py-1.5 text-sm text-white/80 hover:text-white rounded-full border border-white/10 hover:border-white/20 transition-all"
+            >
+              Strategy Lab
+            </Link>
             <a
               href="#komunitas"
               className="px-5 py-1.5 text-sm text-white/80 hover:text-white rounded-full border border-white/10 hover:border-white/20 transition-all"
@@ -75,6 +82,13 @@ export default function Navbar() {
       {mobileOpen && (
         <div className="md:hidden border-t border-white/5 bg-[#1a1a1a]">
           <div className="px-4 py-4 space-y-3">
+            <Link
+              href="/strategy-lab"
+              onClick={() => setMobileOpen(false)}
+              className="block text-sm text-white/70 hover:text-white transition-colors"
+            >
+              Strategy Lab
+            </Link>
             <a
               href="#komunitas"
               onClick={() => setMobileOpen(false)}

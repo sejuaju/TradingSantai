@@ -1,25 +1,26 @@
 @import "tailwindcss";
 
 :root {
-  --background: #111111;
-  --foreground: #f5f5f5;
-  --accent: #22c55e;
-  --accent-dark: #16a34a;
-  --card-bg: #1a1a2e;
-  --card-border: #2a2a3e;
-  --muted: #999999;
-  --navbar-bg: #1a1a1a;
+  --background: #05060c;
+  --foreground: #f0f0f5;
+  --accent: #6366f1;
+  --accent-green: #22c55e;
+  --accent-dark: #4f46e5;
+  --card-bg: #0a0b14;
+  --card-border: rgba(255,255,255,0.07);
+  --muted: rgba(255,255,255,0.4);
+  --navbar-bg: #080910;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-accent: var(--accent);
+  --color-background:  var(--background);
+  --color-foreground:  var(--foreground);
+  --color-accent:      var(--accent);
   --color-accent-dark: var(--accent-dark);
-  --color-card-bg: var(--card-bg);
+  --color-card-bg:     var(--card-bg);
   --color-card-border: var(--card-border);
-  --color-muted: var(--muted);
-  --color-navbar-bg: var(--navbar-bg);
+  --color-muted:       var(--muted);
+  --color-navbar-bg:   var(--navbar-bg);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -30,44 +31,90 @@ body {
   font-family: var(--font-sans), Arial, Helvetica, sans-serif;
 }
 
-html {
-  scroll-behavior: smooth;
-}
+html { scroll-behavior: smooth; }
 
 @keyframes fadeInUp {
   from { opacity: 0; transform: translateY(20px); }
-  to { opacity: 1; transform: translateY(0); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.animate-fade-in-up { animation: fadeInUp 0.6s ease-out forwards; }
+
+/* ── Scrollbar utilities ───────────────────────────── */
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+.signal-scroll::-webkit-scrollbar       { width: 4px; }
+.signal-scroll::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); border-radius: 4px; }
+.signal-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 4px; }
+.signal-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.15); }
+.signal-scroll { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.08) rgba(255,255,255,0.02); }
+
+.lab-editor-scroll::-webkit-scrollbar       { width: 6px; height: 6px; }
+.lab-editor-scroll::-webkit-scrollbar-track { background: rgba(0,0,0,0.2); }
+.lab-editor-scroll::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.10); border-radius: 99px; }
+.lab-editor-scroll::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.18); }
+.lab-editor-scroll { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.10) rgba(0,0,0,0.2); }
+
+/* ── Strategy Lab v2 ───────────────────────────────── */
+.lab-page {
+  overflow: hidden;
+  background-color: #05060c;
+  background-image:
+    radial-gradient(ellipse 65% 40% at 50% -5%, rgba(99,102,241,0.12), transparent),
+    radial-gradient(ellipse 35% 25% at 95% 85%, rgba(34,197,94,0.06), transparent);
 }
 
-.animate-fade-in-up {
-  animation: fadeInUp 0.6s ease-out forwards;
+.lab-glass {
+  background: rgba(10,11,20,0.95);
+  border: 1px solid rgba(255,255,255,0.07);
+  backdrop-filter: blur(12px);
 }
 
-/* Hide scrollbar but keep scroll functionality */
-.no-scrollbar::-webkit-scrollbar {
-  display: none;
-}
-.no-scrollbar {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
+.lab-glass-hover:hover {
+  border-color: rgba(255,255,255,0.13);
+  background: rgba(12,13,22,0.98);
 }
 
-/* Custom scrollbar for signal panel */
-.signal-scroll::-webkit-scrollbar {
-  width: 4px;
+/* Indigo card glow on hover/active */
+.lab-card-glow-indigo {
+  transition: box-shadow 0.2s, border-color 0.2s;
 }
-.signal-scroll::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.02);
-  border-radius: 4px;
+.lab-card-glow-indigo:hover {
+  box-shadow: 0 0 0 1px rgba(99,102,241,0.3), 0 8px 32px -8px rgba(99,102,241,0.18);
+  border-color: rgba(99,102,241,0.3) !important;
 }
-.signal-scroll::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
-  border-radius: 4px;
+.lab-card-active-indigo {
+  box-shadow: 0 0 0 1px rgba(99,102,241,0.45), 0 12px 40px -8px rgba(99,102,241,0.22) !important;
+  border-color: rgba(99,102,241,0.4) !important;
 }
-.signal-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.15);
+
+.lab-card-glow-amber {
+  transition: box-shadow 0.2s, border-color 0.2s;
 }
-.signal-scroll {
-  scrollbar-width: thin;
-  scrollbar-color: rgba(255, 255, 255, 0.08) rgba(255, 255, 255, 0.02);
+.lab-card-glow-amber:hover {
+  box-shadow: 0 0 0 1px rgba(245,158,11,0.3), 0 8px 32px -8px rgba(245,158,11,0.15);
+  border-color: rgba(245,158,11,0.3) !important;
+}
+
+/* Animated run button */
+@keyframes indigo-pulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(99,102,241,0.5), 0 4px 24px -4px rgba(99,102,241,0.5); }
+  50%      { box-shadow: 0 0 0 6px rgba(99,102,241,0),  0 4px 24px -4px rgba(99,102,241,0.6); }
+}
+.lab-run-idle   { animation: indigo-pulse 2.5s ease-in-out infinite; }
+
+@keyframes lab-spin { to { transform: rotate(360deg); } }
+.lab-spin { animation: lab-spin 0.9s linear infinite; }
+
+/* Metric card */
+.lab-metric {
+  background: rgba(255,255,255,0.025);
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+/* Step badge active glow */
+.lab-step-active {
+  box-shadow: 0 0 0 1px rgba(99,102,241,0.4), 0 0 16px -4px rgba(99,102,241,0.5);
 }

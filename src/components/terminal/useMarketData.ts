@@ -70,6 +70,7 @@ export function useMarketData(instrumentId: string = DEFAULT_INSTRUMENT_ID) {
   // ─── Refs ─────────────────────────────────────────────────────────────────────
   const prevPriceRef     = useRef(0);
   const wsRef            = useRef<WebSocket | null>(null);
+  const wsClosingRef     = useRef(false);
   const reconnectTimer   = useRef<ReturnType<typeof setTimeout> | null>(null);
   const tfRef            = useRef(selectedTf);
   const mountedRef       = useRef(true);
@@ -216,6 +217,31 @@ export function useMarketData(instrumentId: string = DEFAULT_INSTRUMENT_ID) {
     }
   };
 
+  // ── Tutup WS dengan aman — cegah onerror palsu saat cleanup / ganti instrument ──
+  const disconnectWS = (reason = "disconnect") => {
+    wsClosingRef.current = true;
+    if (reconnectTimer.current) {
+      clearTimeout(reconnectTimer.current);
+      reconnectTimer.current = null;
+    }
+    const ws = wsRef.current;
+    if (ws) {
+      ws.onopen = null;
+      ws.onmessage = null;
+      ws.onerror = null;
+      ws.onclose = null;
+      try {
+        ws.close(1000, reason);
+      } catch {
+        /* already closed */
+      }
+      wsRef.current = null;
+    }
+    queueMicrotask(() => {
+      wsClosingRef.current = false;
+    });
+  };
+
   // ── WebSocket: live kline stream (FIX: Better error handling & typing) ───────
   const connectWS = (tf: string, sym: string = symbolRef.current) => {
     // Only works for Binance instruments
@@ -224,14 +250,7 @@ export function useMarketData(instrumentId: string = DEFAULT_INSTRUMENT_ID) {
       return;
     }
 
-    if (wsRef.current) {
-      wsRef.current.onclose = null; // prevent stale reconnect
-      wsRef.current.close();
-    }
-    if (reconnectTimer.current) {
-      clearTimeout(reconnectTimer.current);
-      reconnectTimer.current = null;
-    }
+    disconnectWS("reconnect");
 
     const { wsInterval } = TF_MAP[tf];
     const wsUrl = `${API_CONFIG.WS_API}/${sym.toLowerCase()}@kline_${wsInterval}`;
@@ -246,17 +265,22 @@ export function useMarketData(instrumentId: string = DEFAULT_INSTRUMENT_ID) {
       }
     };
     
-    ws.onerror = (err) => {
-      console.error("[WS] Error:", err);
-      ws.close();
+    ws.onerror = () => {
+      // ErrorEvent WebSocket selalu tampil sebagai {} di console — bukan bug data.
+      // Abaikan jika kita yang menutup koneksi (unmount, ganti TF, Suspense remount).
+      if (wsClosingRef.current || wsRef.current !== ws) return;
+      console.warn(`[WS] Connection issue for ${sym}@${wsInterval}, waiting for reconnect...`);
     };
     
-    ws.onclose = () => {
-      console.log("[WS] Disconnected");
+    ws.onclose = (event) => {
+      if (wsRef.current === ws) wsRef.current = null;
+      if (wsClosingRef.current) return;
+
+      console.log("[WS] Disconnected", event.code);
       if (mountedRef.current) {
         setState(prev => ({ ...prev, connected: false }));
         reconnectTimer.current = setTimeout(() => {
-          if (mountedRef.current) {
+          if (mountedRef.current && instrument.broker === "BINANCE") {
             console.log("[WS] Reconnecting...");
             connectWS(tfRef.current, symbolRef.current);
           }
@@ -420,12 +444,7 @@ export function useMarketData(instrumentId: string = DEFAULT_INSTRUMENT_ID) {
         const wsHealthy = wsRef.current?.readyState === WebSocket.OPEN;
         if (!wsHealthy) {
           console.warn("[useMarketData] WS Saxo tidak sehat saat tab aktif kembali, reconnecting...");
-          if (wsRef.current) {
-            wsRef.current.onclose = null;
-            wsRef.current.onerror = null;
-            wsRef.current.close();
-            wsRef.current = null;
-          }
+          disconnectWS("visibility-recover");
           connectSaxoStream();
         }
         // Refetch candles untuk isi gap data selama tab tidak aktif
@@ -450,10 +469,7 @@ export function useMarketData(instrumentId: string = DEFAULT_INSTRUMENT_ID) {
       if (tickerInterval) clearInterval(tickerInterval);
       if (htfInterval) clearInterval(htfInterval);
       if (reconnectTimer.current) clearTimeout(reconnectTimer.current);
-      if (wsRef.current) {
-        wsRef.current.onclose = null;
-        wsRef.current.close();
-      }
+      disconnectWS("unmount");
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [symbol]); // Re-initialize when symbol changes
@@ -796,11 +812,7 @@ export function useMarketData(instrumentId: string = DEFAULT_INSTRUMENT_ID) {
       try {
         await fetchSaxoCandles(tf, instrument);
         // ✅ FIX: Tutup WS lama & reconnect dengan horizon baru
-        if (wsRef.current) {
-          wsRef.current.onclose = null;
-          wsRef.current.close(1000, "TF switch");
-          wsRef.current = null;
-        }
+        disconnectWS("TF switch");
         if (mountedRef.current) {
           await connectSaxoStream();
         }
