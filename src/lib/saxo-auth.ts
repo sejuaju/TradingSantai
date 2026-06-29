@@ -38,12 +38,20 @@ function getStreamUrl(environment: "SIM" | "LIVE"): string {
     : "wss://streaming.saxobank.com/openapi";
 }
 
+/** Redirect URI — di browser selalu pakai origin saat ini (Vercel / localhost). */
+export function getSaxoRedirectUri(): string {
+  if (typeof window !== "undefined") {
+    return `${window.location.origin}/auth/callback`;
+  }
+  return process.env.NEXT_PUBLIC_SAXO_REDIRECT_URI || "http://localhost:3000/auth/callback";
+}
+
 // ─── Get Configuration from Environment ───────────────────────────────────────
 export function getSaxoConfig(): SaxoAuthConfig {
   const appKey = process.env.NEXT_PUBLIC_SAXO_APP_KEY;
   const appSecret = process.env.SAXO_APP_SECRET;
   const environment = (process.env.NEXT_PUBLIC_SAXO_ENVIRONMENT || "SIM") as "SIM" | "LIVE";
-  const redirectUri = process.env.NEXT_PUBLIC_SAXO_REDIRECT_URI || "http://localhost:3000/auth/callback";
+  const redirectUri = getSaxoRedirectUri();
 
   if (!appKey) {
     throw new Error("NEXT_PUBLIC_SAXO_APP_KEY is not configured");
