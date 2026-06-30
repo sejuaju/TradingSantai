@@ -1,28 +1,29 @@
 /**
- * Penyimpanan refresh token demo Saxo — shared antar instance serverless.
- *
- * Prioritas baca:
- *   1. Vercel KV (production — token rotate otomatis tersimpan)
- *   2. File .saxo-demo-token.json (localhost)
- *   3. Env SAXO_DEMO_REFRESH_TOKEN (seed awal)
- *
- * Tanpa KV di Vercel, banyak instance akan saling invalidasi token Saxo
- * karena setiap refresh memutar refresh_token.
+ * Penyimpanan refresh token demo Saxo (Vercel KV + fallback)
+ * Versi lebih aman untuk serverless environment
  */
 
 import { readDemoToken, saveDemoToken } from "./saxo-demo-token";
 
 const KV_KEY = "saxo:demo:refresh_token";
+const MEMORY_TTL_MS = 45_000; // 45 detik — cukup aman + tidak terlalu sering hit KV
 
-/** Cache per warm instance — mengurangi hit KV */
-let memoryRefreshToken: string | null = null;
+interface CachedToken {
+  token: string;
+  updatedAt: number;
+}
+
+let memoryCache: CachedToken | null = null;
 
 function hasKv(): boolean {
   return Boolean(process.env.KV_REST_API_URL && process.env.KV_REST_API_TOKEN);
 }
 
+// ==================== KV Helpers ====================
+
 async function kvGet(): Promise<string | null> {
   if (!hasKv()) return null;
+
   try {
     const { kv } = await import("@vercel/kv");
     const value = await kv.get<string>(KV_KEY);
@@ -35,63 +36,77 @@ async function kvGet(): Promise<string | null> {
 
 async function kvSet(token: string): Promise<boolean> {
   if (!hasKv()) return false;
+
   try {
     const { kv } = await import("@vercel/kv");
     await kv.set(KV_KEY, token);
+    console.log("[TokenStore] ✅ Refresh token berhasil disimpan ke KV");
     return true;
   } catch (err) {
-    console.warn("[TokenStore] KV write failed:", err);
+    console.error("[TokenStore] ❌ KV write failed:", err);
     return false;
   }
 }
 
-/** Ambil refresh token demo terbaru. */
-export async function getDemoRefreshToken(): Promise<string | null> {
-  if (memoryRefreshToken) return memoryRefreshToken;
+// ==================== Public Functions ====================
 
+/** Ambil refresh token demo terbaru (dengan cache + TTL) */
+export async function getDemoRefreshToken(): Promise<string | null> {
+  const now = Date.now();
+
+  // Gunakan memory cache kalau masih valid
+  if (memoryCache && now - memoryCache.updatedAt < MEMORY_TTL_MS) {
+    return memoryCache.token;
+  }
+
+  // Memory cache expired → cek KV dulu
   const fromKv = await kvGet();
   if (fromKv) {
-    memoryRefreshToken = fromKv;
+    memoryCache = { token: fromKv, updatedAt: now };
     return fromKv;
   }
 
+  // Fallback ke file (localhost)
   const fromFile = readDemoToken();
   if (fromFile?.refreshToken) {
-    memoryRefreshToken = fromFile.refreshToken;
+    memoryCache = { token: fromFile.refreshToken, updatedAt: now };
     return fromFile.refreshToken;
   }
 
+  // Fallback terakhir ke environment variable
   const fromEnv = process.env.SAXO_DEMO_REFRESH_TOKEN;
   if (fromEnv) {
-    memoryRefreshToken = fromEnv;
+    memoryCache = { token: fromEnv, updatedAt: now };
     return fromEnv;
   }
 
   return null;
 }
 
-/** Simpan refresh token baru setelah Saxo rotate. */
+/** Simpan refresh token baru (setelah Saxo rotate) */
 export async function setDemoRefreshToken(token: string): Promise<void> {
-  memoryRefreshToken = token;
+  const now = Date.now();
 
-  const savedKv = await kvSet(token);
-  if (savedKv) {
-    console.log("[TokenStore] Refresh token disimpan ke KV");
+  // Update memory cache
+  memoryCache = { token, updatedAt: now };
+
+  // Simpan ke KV (prioritas utama)
+  const savedToKv = await kvSet(token);
+  if (savedToKv) {
     return;
   }
 
+  // Fallback ke file (hanya untuk localhost development)
   try {
     saveDemoToken(token);
-    console.log("[TokenStore] Refresh token disimpan ke file");
+    console.log("[TokenStore] Refresh token disimpan ke file (localhost)");
   } catch {
-    console.warn(
-      "[TokenStore] Tidak bisa persist token — setup Vercel KV atau update SAXO_DEMO_REFRESH_TOKEN"
-    );
+    console.warn("[TokenStore] Gagal menyimpan token ke file juga.");
   }
 }
 
 export function isDemoRefreshConfigured(): boolean {
-  if (memoryRefreshToken) return true;
+  if (memoryCache) return true;
   if (readDemoToken() !== null) return true;
   if (process.env.SAXO_DEMO_REFRESH_TOKEN) return true;
   if (hasKv()) return true;
