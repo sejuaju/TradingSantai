@@ -15,16 +15,28 @@ const EMPTY_BREAKDOWN: ScoreBreakdown = {
 
 export function useSignals(
   candles: Candle[],
-  htfTrend: "bullish" | "bearish" | "neutral"
+  htfTrend: "bullish" | "bearish" | "neutral",
+  instrumentId: string,
 ) {
   const [signals, setSignals] = useState<Signal[]>([]);
 
   // ─── Refs: tidak trigger re-render, selalu fresh ────────────────────────────
   const lastSignalTime  = useRef(0);
+  const instrumentRef   = useRef(instrumentId);
   const htfTrendRef     = useRef(htfTrend);
   const candlesRef      = useRef<Candle[]>([]);   // ← FIX: selalu fresh
   const signalsRef      = useRef<Signal[]>([]);   // ← FIX: selalu fresh
   const debugThrottle   = useRef(0);              // throttle log
+
+  // Reset sinyal saat ganti instrument — hindari posisi BTC di chart Gold
+  useEffect(() => {
+    if (instrumentRef.current === instrumentId) return;
+    instrumentRef.current = instrumentId;
+    lastSignalTime.current = 0;
+    setSignals([]);
+    signalsRef.current = [];
+    console.log(`[SIGNAL] Instrument → ${instrumentId}, signals cleared`);
+  }, [instrumentId]);
 
   // Sync refs setiap render
   useEffect(() => { htfTrendRef.current  = htfTrend; },  [htfTrend]);
@@ -65,9 +77,10 @@ export function useSignals(
     );
 
     if (signal) {
-      console.log(`[SIGNAL] ✅ ${signal.type} @ ${signal.price.toFixed(2)} | ${signal.reason}`);
-      lastSignalTime.current = signal.time;
-      setSignals((prev) => [signal, ...prev].slice(0, TRADING_CONFIG.MAX_SIGNALS_HISTORY));
+      const tagged: Signal = { ...signal, instrumentId: instrumentRef.current };
+      console.log(`[SIGNAL] ✅ ${tagged.type} @ ${tagged.price.toFixed(2)} | ${instrumentRef.current} | ${tagged.reason}`);
+      lastSignalTime.current = tagged.time;
+      setSignals((prev) => [tagged, ...prev].slice(0, TRADING_CONFIG.MAX_SIGNALS_HISTORY));
     }
   }, []);
 
@@ -177,8 +190,12 @@ export function useSignals(
     runDetection();
   }, [candles, runDetection]);
 
+  const instrumentSignals = signals.filter(
+    s => !s.instrumentId || s.instrumentId === instrumentId,
+  );
+
   return {
-    signals,
+    signals: instrumentSignals,
     rsiValue: indicators.rsi,
     ema50Value: indicators.ema50,
     ema200Value: indicators.ema200,

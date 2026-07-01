@@ -2,9 +2,10 @@
 
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Candle } from "./types";
-import { TF_MAP, HTF_MAP } from "./constants";
+import { TF_MAP, HTF_MAP, HTF_SAXO_TF } from "./constants";
 import { API_CONFIG, TRADING_CONFIG, UPDATE_INTERVALS, INSTRUMENTS, DEFAULT_INSTRUMENT_ID, INDICATOR_CONFIG } from "./config";
-import { calcEMA } from "./indicators";
+import type { Instrument } from "./config";
+import { computeHtfTrendFromCloses } from "./indicators";
 import { getUIC } from "../../lib/saxo-uic-cache";
 import { getAccessToken } from "../../lib/saxo-auth";
 import { connectSaxoStream as connectSaxoStreamExternal } from "./connectSaxoStream";
@@ -42,6 +43,39 @@ interface Binance24hTicker {
   highPrice: string;
   lowPrice: string;
   volume: string;
+}
+
+/** Transform raw Saxo chart API payload → Candle[] */
+function transformSaxoChartData(data: { Data?: Record<string, unknown>[] }): Candle[] {
+  return (data.Data || []).map((item: Record<string, unknown>) => {
+    const openBid  = typeof item.OpenBid  === "number" ? item.OpenBid  : undefined;
+    const openAsk  = typeof item.OpenAsk  === "number" ? item.OpenAsk  : undefined;
+    const highBid  = typeof item.HighBid  === "number" ? item.HighBid  : undefined;
+    const highAsk  = typeof item.HighAsk  === "number" ? item.HighAsk  : undefined;
+    const lowBid   = typeof item.LowBid   === "number" ? item.LowBid   : undefined;
+    const lowAsk   = typeof item.LowAsk   === "number" ? item.LowAsk   : undefined;
+    const closeBid = typeof item.CloseBid === "number" ? item.CloseBid : undefined;
+    const closeAsk = typeof item.CloseAsk === "number" ? item.CloseAsk : undefined;
+
+    const openFallback  = typeof item.Open  === "number" ? item.Open  : 0;
+    const highFallback  = typeof item.High  === "number" ? item.High  : 0;
+    const lowFallback   = typeof item.Low   === "number" ? item.Low   : 0;
+    const closeFallback = typeof item.Close === "number" ? item.Close : 0;
+
+    const open  = openBid  !== undefined && openAsk  !== undefined ? (openBid  + openAsk)  / 2 : openFallback;
+    const high  = highBid  !== undefined && highAsk  !== undefined ? (highBid  + highAsk)  / 2 : highFallback;
+    const low   = lowBid   !== undefined && lowAsk   !== undefined ? (lowBid   + lowAsk)   / 2 : lowFallback;
+    const close = closeBid !== undefined && closeAsk !== undefined ? (closeBid + closeAsk) / 2 : closeFallback;
+
+    return {
+      time:   new Date(item.Time as string).getTime(),
+      open, high, low, close,
+      volume: 0,
+    };
+  }).filter((candle: Candle) =>
+    !isNaN(candle.open) && !isNaN(candle.high) && !isNaN(candle.low) && !isNaN(candle.close) &&
+    candle.open > 0 && candle.high > 0 && candle.low > 0 && candle.close > 0
+  );
 }
 
 export function useMarketData(instrumentId: string = DEFAULT_INSTRUMENT_ID) {
@@ -175,45 +209,123 @@ export function useMarketData(instrumentId: string = DEFAULT_INSTRUMENT_ID) {
     }
   };
 
-  // ── REST: Higher Timeframe trend (FIX: Better error handling) ────────────────
-  const fetchHTFTrend = async (tf: string, sym: string = symbolRef.current) => {
-    // Only works for Binance instruments
-    if (instrument.broker !== "BINANCE") {
-      return;
+  // ── Saxo chart fetch (shared: main TF + HTF trend) ───────────────────────────
+  const fetchSaxoChartCandles = async (
+    tf: string,
+    instr: Instrument,
+    count: number = TRADING_CONFIG.MAX_CANDLES_BUFFER,
+  ): Promise<Candle[]> => {
+    const accessToken = await getAccessToken();
+    if (!accessToken) {
+      throw new Error(
+        "Market data tidak tersedia. " +
+        "Tambahkan SAXO_DEMO_REFRESH_TOKEN di .env.local untuk akses publik, " +
+        "atau login dengan akun Saxo."
+      );
     }
 
+    let uic: number | undefined;
+    let resolvedAssetType: string | undefined;
+
+    if (instr.searchKeywords && instr.assetType) {
+      try {
+        const dynamicResult = await getUIC(
+          instr.id, instr.searchKeywords, instr.assetType, accessToken,
+        );
+        if (dynamicResult) {
+          uic = dynamicResult.uic;
+          resolvedAssetType = dynamicResult.assetType;
+        } else {
+          uic = instr.uic;
+          resolvedAssetType = instr.assetType;
+        }
+      } catch {
+        uic = instr.uic;
+        resolvedAssetType = instr.assetType;
+      }
+    } else if (instr.uic) {
+      uic = instr.uic;
+      resolvedAssetType = instr.assetType;
+    }
+
+    if (!uic || !resolvedAssetType) {
+      throw new Error(`UIC not found for ${instr.symbol}`);
+    }
+
+    const accountsResponse = await fetch("/api/saxo/accounts", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ accessToken }),
+    });
+    if (!accountsResponse.ok) {
+      throw new Error("Failed to get Saxo account information");
+    }
+    const accountsData = await accountsResponse.json();
+    if (!accountsData.Data?.length) {
+      throw new Error("No Saxo accounts found");
+    }
+    const accountKey = accountsData.Data[0].AccountKey as string;
+
+    const { SAXO_HORIZONS } = await import("./adapters/saxoAdapter");
+    const horizon = SAXO_HORIZONS[tf] || 15;
+
+    const response = await fetch("/api/saxo/chart", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        accessToken,
+        accountKey,
+        uic,
+        assetType: resolvedAssetType,
+        horizon,
+        count,
+        mode: "UpTo",
+        time: new Date().toISOString(),
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.details || `Chart API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    const candles = transformSaxoChartData(data);
+    if (candles.length === 0) {
+      throw new Error("No valid Saxo chart data received");
+    }
+    return candles;
+  };
+
+  // ── REST: Higher Timeframe trend (Binance + Saxo) ───────────────────────────
+  const fetchHTFTrend = async (tf: string, sym: string = symbolRef.current) => {
     try {
-      const htfInterval = HTF_MAP[tf] || "4h";
-      const url = `${API_CONFIG.REST_API}/klines?symbol=${sym}&interval=${htfInterval}&limit=30`;
-      
-      const res = await fetch(url);
-      
-      if (!res.ok) {
-        throw new Error(`HTF API error: ${res.status}`);
-      }
-      
-      const data = await res.json();
-      
-      if (!Array.isArray(data) || data.length < 21) {
-        console.warn("Insufficient HTF data");
-        return;
-      }
-      
-      const closes = data.map((k: number[]) => parseFloat(String(k[4])));
-      const ema50   = calcEMA(closes, INDICATOR_CONFIG.EMA_SHORT);
-      const ema200  = calcEMA(closes, INDICATOR_CONFIG.EMA_LONG);
-      const last   = closes.length - 1;
-      
       let trend: "bullish" | "bearish" | "neutral" = "neutral";
-      if      (ema50[last] > ema200[last] && closes[last] > ema50[last]) trend = "bullish";
-      else if (ema50[last] < ema200[last] && closes[last] < ema50[last]) trend = "bearish";
-      
+
+      if (instrument.broker === "BINANCE") {
+        const htfInterval = HTF_MAP[tf] || "4h";
+        const url = `${API_CONFIG.REST_API}/klines?symbol=${sym}&interval=${htfInterval}&limit=${INDICATOR_CONFIG.EMA_LONG}`;
+        const res = await fetch(url);
+        if (!res.ok) throw new Error(`HTF API error: ${res.status}`);
+        const data = await res.json();
+        if (!Array.isArray(data) || data.length < INDICATOR_CONFIG.EMA_LONG) {
+          console.warn("[HTF] Insufficient Binance HTF data");
+          return;
+        }
+        const closes = data.map((k: number[]) => parseFloat(String(k[4])));
+        trend = computeHtfTrendFromCloses(closes);
+      } else if (instrument.broker === "SAXO") {
+        const htfTf = HTF_SAXO_TF[tf] || "4H";
+        const candles = await fetchSaxoChartCandles(htfTf, instrument, INDICATOR_CONFIG.EMA_LONG);
+        trend = computeHtfTrendFromCloses(candles.map(c => c.close));
+        console.log(`[Saxo HTF] ${htfTf} trend → ${trend}`);
+      }
+
       if (mountedRef.current) {
         setState(prev => ({ ...prev, htfTrend: trend }));
       }
     } catch (e) {
       console.error("Failed to fetch HTF:", e);
-      // Don't show error - not critical
     }
   };
 
@@ -364,11 +476,11 @@ export function useMarketData(instrumentId: string = DEFAULT_INSTRUMENT_ID) {
         console.log(`[Saxo] Loading data for ${instrument.displayName} (${instrument.symbol})`);
         
         try {
-          // Fetch historical candles
-          await fetchSaxoCandles(selectedTf, instrument);
-          
-          // Fetch current price info (24h high/low)
-          await fetchSaxoPriceInfo(instrument);
+          await Promise.all([
+            fetchSaxoCandles(selectedTf, instrument),
+            fetchSaxoPriceInfo(instrument),
+            fetchHTFTrend(selectedTf),
+          ]);
           
           // Connect to real-time stream
           // Token validation sudah di-handle dalam connectSaxoStream
@@ -421,14 +533,20 @@ export function useMarketData(instrumentId: string = DEFAULT_INSTRUMENT_ID) {
     
     initialize();
 
-    // Binance intervals (only for Binance instruments)
+    // Refresh intervals per broker
     let tickerInterval: ReturnType<typeof setInterval> | null = null;
     let htfInterval: ReturnType<typeof setInterval> | null = null;
 
     if (instrument.broker === "BINANCE") {
       tickerInterval = setInterval(() => fetch24hTicker(symbolRef.current), UPDATE_INTERVALS.TICKER_24H_MS);
-      htfInterval = setInterval(() => fetchHTFTrend(tfRef.current, symbolRef.current), UPDATE_INTERVALS.HTF_TREND_MS);
     }
+    htfInterval = setInterval(() => {
+      if (instrument.broker === "BINANCE") {
+        fetchHTFTrend(tfRef.current, symbolRef.current);
+      } else {
+        fetchHTFTrend(tfRef.current);
+      }
+    }, UPDATE_INTERVALS.HTF_TREND_MS);
 
     // ✅ FIX: recovery saat tab kembali aktif setelah lama di background. WebSocket
     // bisa jadi "zombie" (readyState masih OPEN tapi koneksi TCP sebenarnya sudah mati —
@@ -476,247 +594,21 @@ export function useMarketData(instrumentId: string = DEFAULT_INSTRUMENT_ID) {
 
   // ── Saxo Data Fetching ────────────────────────────────────────────────────────
   const fetchSaxoCandles = async (tf: string, instr: typeof instrument) => {
-    // Ambil access token — user token (kalau sudah login) atau guest/demo token
-    const accessToken = await getAccessToken();
-    if (!accessToken) {
-      throw new Error(
-        "Market data tidak tersedia. " +
-        "Tambahkan SAXO_DEMO_REFRESH_TOKEN di .env.local untuk akses publik, " +
-        "atau login dengan akun Saxo."
-      );
-    }
-
-    // DYNAMIC UIC LOOKUP: selalu coba dynamic (cache/API) dulu, hardcoded hanya fallback terakhir
-    console.log(`[Saxo] Starting UIC resolution for ${instr.symbol}`, {
-      hasHardcodedUIC: !!instr.uic,
-      hardcodedUIC: instr.uic,
-      hasSearchKeywords: !!instr.searchKeywords,
-      searchKeywords: instr.searchKeywords,
-      assetType: instr.assetType,
-    });
-
-    let uic: number | undefined;
-    let resolvedAssetType: string | undefined;
-
-    if (instr.searchKeywords && instr.assetType) {
-      console.log(`[Saxo] 🔍 Resolving UIC dynamically for ${instr.symbol}...`);
-      try {
-        const dynamicResult = await getUIC(
-          instr.id,
-          instr.searchKeywords,
-          instr.assetType,
-          accessToken
-        );
-        if (dynamicResult) {
-          uic = dynamicResult.uic;
-          resolvedAssetType = dynamicResult.assetType; // ✅ assetType NYATA dari Saxo
-          console.log(`[Saxo] ✅ Dynamic UIC resolved for ${instr.symbol}: UIC=${uic}, AssetType=${resolvedAssetType}`);
-        } else {
-          console.warn(`[Saxo] ⚠️ Dynamic UIC lookup failed for ${instr.symbol}, falling back to hardcoded...`);
-          uic = instr.uic;
-          resolvedAssetType = instr.assetType;
-          if (uic) console.log(`[Saxo] ↩️ Using hardcoded fallback UIC for ${instr.symbol}: ${uic}`);
-        }
-      } catch (error) {
-        console.error(`[Saxo] ❌ Error during dynamic UIC lookup:`, error);
-        uic = instr.uic;
-        resolvedAssetType = instr.assetType;
-        if (uic) console.log(`[Saxo] ↩️ Using hardcoded fallback UIC for ${instr.symbol}: ${uic}`);
-      }
-    } else if (instr.uic) {
-      uic = instr.uic;
-      resolvedAssetType = instr.assetType;
-      console.log(`[Saxo] ✅ Using hardcoded UIC for ${instr.symbol} (no searchKeywords): ${uic}`);
-    } else {
-      console.error(`[Saxo] ❌ No UIC and no searchKeywords! Config:`, instr);
-    }
-    
-    if (!uic) {
-      throw new Error(`UIC not found for ${instr.symbol}. Please check: 1) Login with Saxo, 2) Instrument config has searchKeywords, 3) Browser cache cleared.`);
-    }
-
-    if (!resolvedAssetType) {
-      throw new Error(`Invalid Saxo instrument configuration for ${instr.symbol}: no assetType resolved`);
-    }
-
-    console.log(`[Saxo] 🚀 Fetching candles for ${instr.symbol} (UIC: ${uic}, tf: ${tf})`);
-
-    // Step 1: Get AccountKey from Saxo
-    let accountKey: string;
+    console.log(`[Saxo] Fetching candles for ${instr.symbol} (tf: ${tf})`);
     try {
-      const accountsResponse = await fetch("/api/saxo/accounts", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          accessToken: accessToken,
-        }),
-      });
-
-      if (!accountsResponse.ok) {
-        const error = await accountsResponse.json();
-        console.error("[Saxo] Accounts API error:", error);
-        throw new Error("Failed to get account information. Please login again.");
-      }
-
-      const accountsData = await accountsResponse.json();
-      
-      if (!accountsData.Data || accountsData.Data.length === 0) {
-        throw new Error("No accounts found. Please check your Saxo account.");
-      }
-
-      // Use first account
-      accountKey = accountsData.Data[0].AccountKey;
-      console.log("[Saxo] Using AccountKey:", accountKey);
-    } catch (error) {
-      console.error("[Saxo] Failed to get AccountKey:", error);
-      throw error;
-    }
-
-    // Import SAXO_HORIZONS
-    const { SAXO_HORIZONS } = await import("./adapters/saxoAdapter");
-    
-    // Get horizon (candle interval in minutes)
-    const horizon = SAXO_HORIZONS[tf] || 15;
-    const count = TRADING_CONFIG.MAX_CANDLES_BUFFER;
-
-    try {
-      // Step 2: Call our server-side Chart API route with AccountKey
-      // Mode "From" requires Time parameter - use current time to get latest candles
-      const currentTime = new Date().toISOString();
-      
-      const response = await fetch("/api/saxo/chart", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          accessToken: accessToken,
-          accountKey: accountKey,
-          uic: uic,
-          assetType: resolvedAssetType, // assetType NYATA dari Saxo, bukan dari config
-          horizon: horizon,
-          count: count,
-          mode: "UpTo",
-          time: currentTime,
-        }),
-      });
-
-      if (!response.ok) {
-        const error = await response.json();
-        console.error("[Saxo] Chart API error:", error);
-        throw new Error(error.details || `Chart API error: ${response.status}`);
-      }
-
-      const data = await response.json();
-
-      // Debug: log raw API response
-      console.log("[Saxo] Raw API response keys:", Object.keys(data));
-      console.log("[Saxo] Data array length:", data.Data?.length || 0);
-      
-      if (data.Data && data.Data.length > 0) {
-        console.log("[Saxo] First raw candle:", JSON.stringify(data.Data[0], null, 2));
-        console.log("[Saxo] Last raw candle:", JSON.stringify(data.Data[data.Data.length - 1], null, 2));
-      }
-
-      // Transform Saxo format to our Candle format
-      // IMPORTANT: Saxo API returns PascalCase property names (OpenBid, CloseBid, etc)
-      const candles: Candle[] = (data.Data || []).map((item: Record<string, unknown>, index: number) => {
-        // Saxo always provides Bid/Ask for FX with PascalCase names
-        const openBid = typeof item.OpenBid === 'number' ? item.OpenBid : undefined;
-        const openAsk = typeof item.OpenAsk === 'number' ? item.OpenAsk : undefined;
-        const highBid = typeof item.HighBid === 'number' ? item.HighBid : undefined;
-        const highAsk = typeof item.HighAsk === 'number' ? item.HighAsk : undefined;
-        const lowBid = typeof item.LowBid === 'number' ? item.LowBid : undefined;
-        const lowAsk = typeof item.LowAsk === 'number' ? item.LowAsk : undefined;
-        const closeBid = typeof item.CloseBid === 'number' ? item.CloseBid : undefined;
-        const closeAsk = typeof item.CloseAsk === 'number' ? item.CloseAsk : undefined;
-        
-        // Fallback to non-Bid/Ask fields for some asset types
-        const openFallback = typeof item.Open === 'number' ? item.Open : 0;
-        const highFallback = typeof item.High === 'number' ? item.High : 0;
-        const lowFallback = typeof item.Low === 'number' ? item.Low : 0;
-        const closeFallback = typeof item.Close === 'number' ? item.Close : 0;
-        
-        // Calculate mid price from Bid/Ask
-        const open = openBid !== undefined && openAsk !== undefined
-          ? (openBid + openAsk) / 2
-          : openFallback;
-        
-        const high = highBid !== undefined && highAsk !== undefined
-          ? (highBid + highAsk) / 2
-          : highFallback;
-        
-        const low = lowBid !== undefined && lowAsk !== undefined
-          ? (lowBid + lowAsk) / 2
-          : lowFallback;
-        
-        const close = closeBid !== undefined && closeAsk !== undefined
-          ? (closeBid + closeAsk) / 2
-          : closeFallback;
-
-        const candle = {
-          time: new Date(item.Time as string).getTime(),
-          open,
-          high,
-          low,
-          close,
-          volume: 0,
-        };
-
-        // Debug first and last candle transformation
-        if (index === 0 || index === (data.Data?.length || 0) - 1) {
-          console.log(`[Saxo] Candle ${index} transformation:`);
-          console.log("  Raw:", { OpenBid: openBid, OpenAsk: openAsk, CloseBid: closeBid, CloseAsk: closeAsk });
-          console.log("  Calculated:", { open, high, low, close });
-          console.log("  Final candle:", candle);
-        }
-
-        return candle;
-      }).filter((candle: Candle) => {
-        const isValid = 
-          !isNaN(candle.open) && 
-          !isNaN(candle.high) && 
-          !isNaN(candle.low) && 
-          !isNaN(candle.close) &&
-          candle.open > 0 &&
-          candle.high > 0 &&
-          candle.low > 0 &&
-          candle.close > 0;
-        
-        if (!isValid) {
-          console.warn("[Saxo] Filtered out invalid candle:", candle);
-        }
-        
-        return isValid;
-      });
-
-      console.log("[Saxo] Received", candles.length, "valid candles out of", data.Data?.length || 0, "raw candles");
-      
-      if (candles.length > 0) {
-        console.log("[Saxo] First transformed candle:", candles[0]);
-        console.log("[Saxo] Last transformed candle:", candles[candles.length - 1]);
-      }
-
-      if (candles.length === 0) {
-        console.warn("[Saxo] No valid candles after transformation");
-        throw new Error("No valid chart data received");
-      }
+      const candles = await fetchSaxoChartCandles(tf, instr, TRADING_CONFIG.MAX_CANDLES_BUFFER);
+      console.log(`[Saxo] Received ${candles.length} valid candles`);
 
       if (!mountedRef.current) return;
 
       setState(prev => ({
         ...prev,
-        candles: candles,
-        currentPrice: candles.length > 0 ? candles[candles.length - 1].close : 0,
+        candles,
+        currentPrice: candles[candles.length - 1].close,
         isLoading: false,
         error: null,
       }));
-
-      if (candles.length > 0) {
-        prevPriceRef.current = candles[candles.length - 1].close;
-      }
+      prevPriceRef.current = candles[candles.length - 1].close;
     } catch (error) {
       console.error("[Saxo] Candles fetch failed:", error);
       throw error;
@@ -808,10 +700,11 @@ export function useMarketData(instrumentId: string = DEFAULT_INSTRUMENT_ID) {
     setState(prev => ({ ...prev, isLoading: true }));
     
     if (instrument.broker === "SAXO") {
-      // Saxo: fetch new candles for the timeframe
       try {
-        await fetchSaxoCandles(tf, instrument);
-        // ✅ FIX: Tutup WS lama & reconnect dengan horizon baru
+        await Promise.all([
+          fetchSaxoCandles(tf, instrument),
+          fetchHTFTrend(tf),
+        ]);
         disconnectWS("TF switch");
         if (mountedRef.current) {
           await connectSaxoStream();

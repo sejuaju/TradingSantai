@@ -1,7 +1,7 @@
 "use client";
 
 import type { ScoreBreakdown } from "./indicators";
-import { MAX_SCORE } from "./indicators";
+import { MAX_SCORE, getScoreColor, getScoreTier } from "./config";
 import type { Signal } from "./types";
 
 const MX  = "monospace";
@@ -12,22 +12,6 @@ interface Props {
   scoreBreakdown : ScoreBreakdown;
   signals        : Signal[];
   connected      : boolean;
-}
-
-function scoreColor(pct: number) {
-  if (pct >= 80) return "#22c55e";
-  if (pct >= 60) return "#00d4e8";
-  if (pct >= 40) return "#f97316";
-  if (pct >= 20) return "#f59e0b";
-  return "#ef4444";
-}
-
-function getTier(pct: number) {
-  if (pct >= 80) return { tier:"T1", label:"STRONG",  stars:5, color:"#22c55e" };
-  if (pct >= 60) return { tier:"T2", label:"CONFIRM", stars:4, color:"#00d4e8" };
-  if (pct >= 40) return { tier:"T3", label:"WATCH",   stars:3, color:"#f97316" };
-  if (pct >= 20) return { tier:"T4", label:"WEAK",    stars:2, color:"#f59e0b" };
-  return               { tier:"T5", label:"AVOID",   stars:1, color:"#ef4444" };
 }
 
 // ─── Semicircle Gauge ─────────────────────────────────────────────────────────
@@ -181,7 +165,7 @@ function MiniBar({ label, pct, color }: { label:string; pct:number; color:string
 // ─── Composite Score Card ─────────────────────────────────────────────────────
 function ScoreCard({ buyScore, sellScore }: { buyScore:number; sellScore:number }) {
   const pct     = Math.round(Math.max(buyScore, sellScore) / MAX_SCORE * 100);
-  const color   = scoreColor(pct);
+  const color   = getScoreColor(pct);
   const buyPct  = Math.round((buyScore  / MAX_SCORE) * 100);
   const sellPct = Math.round((sellScore / MAX_SCORE) * 100);
 
@@ -213,7 +197,7 @@ function ScoreCard({ buyScore, sellScore }: { buyScore:number; sellScore:number 
 
 // ─── Signal Strength Card ─────────────────────────────────────────────────────
 function StrengthCard({ pct }: { pct:number }) {
-  const { tier, label, stars, color } = getTier(pct);
+  const { tier, label, stars, color } = getScoreTier(pct);
   return (
     <div style={{
       position:"relative", overflow:"hidden", flex:1,

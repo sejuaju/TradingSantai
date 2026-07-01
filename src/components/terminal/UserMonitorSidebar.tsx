@@ -3,20 +3,22 @@
 import { useState, useMemo } from "react";
 import { C, D, T } from "./shared";
 import type { Signal } from "./types";
+import type { Instrument } from "./config";
+import { PIP_SIZE_BY_CATEGORY, TRADING_CONFIG } from "./config";
 
 const MX  = "monospace";
 const col = (gap = 0): React.CSSProperties => ({ display: "flex", flexDirection: "column", gap });
 const row = (gap = 0): React.CSSProperties => ({ display: "flex", alignItems: "center", gap });
 
-const INITIAL_CAPITAL  = 20;
+const INITIAL_CAPITAL  = TRADING_CONFIG.INITIAL_CAPITAL;
 const LEVERAGE_OPTIONS = [5, 10, 20, 50];
-const PIP_SIZE = 1;
-const LOT_UNIT = 0.001;
+const LOT_UNIT = TRADING_CONFIG.LOT_UNIT;
 
 interface Props {
   signals      : Signal[];
   currentPrice : number;
   formatPrice  : (p: number) => string;
+  instrument   : Instrument;
   isFullscreen ?: boolean;
 }
 
@@ -25,29 +27,29 @@ function calcPositionSize(entryPrice: number, leverage: number): number {
   return (INITIAL_CAPITAL * leverage) / entryPrice;
 }
 
-function calcSignalPnl(s: Signal, price: number, leverage: number) {
-  const posBtc   = calcPositionSize(s.price, leverage);
-  const lots     = posBtc / LOT_UNIT;
-  const pipValue = posBtc * PIP_SIZE;
+function calcSignalPnl(s: Signal, price: number, leverage: number, pipSize: number) {
+  const posSize  = calcPositionSize(s.price, leverage);
+  const lots     = posSize / LOT_UNIT;
+  const pipValue = posSize * pipSize;
   const diff     = s.type === "BUY" ? price - s.price : s.price - price;
-  const pips     = diff / PIP_SIZE;
-  const pnlUsd   = posBtc * diff;
+  const pips     = pipSize > 0 ? diff / pipSize : 0;
+  const pnlUsd   = posSize * diff;
   const pnlPct   = (pnlUsd / INITIAL_CAPITAL) * 100;
-  return { pnlUsd, pnlPct, posBtc, lots, pipValue, pips };
+  return { pnlUsd, pnlPct, posSize, lots, pipValue, pips };
 }
 
-function useAccountMetrics(signals: Signal[], currentPrice: number, leverage: number) {
+function useAccountMetrics(signals: Signal[], currentPrice: number, leverage: number, pipSize: number) {
   return useMemo(() => {
     let realizedPnl = 0;
     signals.filter(s => s.status === "win" || s.status === "loss").forEach(s => {
-      const posBtc = calcPositionSize(s.price, leverage);
-      if (s.status === "win")  realizedPnl += posBtc * Math.abs(s.tp - s.price);
-      if (s.status === "loss") realizedPnl -= posBtc * Math.abs(s.sl - s.price);
+      const posSize = calcPositionSize(s.price, leverage);
+      if (s.status === "win")  realizedPnl += posSize * Math.abs(s.tp - s.price);
+      if (s.status === "loss") realizedPnl -= posSize * Math.abs(s.sl - s.price);
     });
 
     let unrealizedPnl = 0;
     signals.filter(s => s.status === "active").forEach(s => {
-      const { pnlUsd } = calcSignalPnl(s, currentPrice, leverage);
+      const { pnlUsd } = calcSignalPnl(s, currentPrice, leverage, pipSize);
       unrealizedPnl += pnlUsd;
     });
 
@@ -60,7 +62,7 @@ function useAccountMetrics(signals: Signal[], currentPrice: number, leverage: nu
     const marginLvl   = marginUsed > 0 ? Math.round((equity / marginUsed) * 100) : 0;
 
     return { equity, balance, marginUsed, freeMargin, realizedPnl, unrealizedPnl, returnPct, marginLvl };
-  }, [signals, currentPrice, leverage]);
+  }, [signals, currentPrice, leverage, pipSize]);
 }
 
 // ─── Section header ───────────────────────────────────────────────────────────
@@ -190,10 +192,11 @@ function LeverageSelector({ value, onChange, currentPrice, activeSignals }: {
 }
 
 // ─── Position card ────────────────────────────────────────────────────────────
-function PositionRow({ s, currentPrice, formatPrice, leverage }: {
+function PositionRow({ s, currentPrice, formatPrice, leverage, symbolLabel, pipSize }: {
   s:Signal; currentPrice:number; formatPrice:(p:number)=>string; leverage:number;
+  symbolLabel:string; pipSize:number;
 }) {
-  const { pnlUsd, pnlPct, lots, pipValue, pips } = calcSignalPnl(s, currentPrice, leverage);
+  const { pnlUsd, pnlPct, lots, pipValue, pips } = calcSignalPnl(s, currentPrice, leverage, pipSize);
   const isBuy    = s.type === "BUY";
   const accent   = isBuy ? C.green : C.red;
   const pnlColor = pnlUsd >= 0 ? C.green : C.red;
@@ -216,7 +219,7 @@ function PositionRow({ s, currentPrice, formatPrice, leverage }: {
           {s.type}
         </span>
         <span style={{ fontSize:12, fontWeight:700, color:T.sub, fontFamily:MX }}>
-          BTC/USDT
+          {symbolLabel}
         </span>
         <div style={{ marginLeft:"auto", ...col(2), alignItems:"flex-end" }}>
           <span style={{ fontSize:15, fontWeight:800, fontFamily:MX,
@@ -288,15 +291,18 @@ function PositionRow({ s, currentPrice, formatPrice, leverage }: {
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export function UserMonitorSidebar({
-  signals, currentPrice, formatPrice, isFullscreen = false,
+  signals, currentPrice, formatPrice, instrument, isFullscreen = false,
 }: Props) {
   const [cubityOn, setCubityOn] = useState(true);
   const [leverage, setLeverage] = useState(10);
 
+  const symbolLabel = instrument.description || instrument.symbol;
+  const pipSize     = PIP_SIZE_BY_CATEGORY[instrument.category] ?? 0.01;
+
   const {
     equity, balance, marginUsed, freeMargin,
     realizedPnl, returnPct, marginLvl,
-  } = useAccountMetrics(signals, currentPrice, leverage);
+  } = useAccountMetrics(signals, currentPrice, leverage, pipSize);
 
   const active  = signals.filter(s => s.status === "active");
   const win     = signals.filter(s => s.status === "win").length;
@@ -441,7 +447,9 @@ export function UserMonitorSidebar({
             <PositionRow key={i} s={s}
               currentPrice={currentPrice}
               formatPrice={formatPrice}
-              leverage={leverage} />
+              leverage={leverage}
+              symbolLabel={symbolLabel}
+              pipSize={pipSize} />
           ))
         )}
 

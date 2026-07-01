@@ -16,6 +16,8 @@ export interface Signal {
   reason: string;
   time: number;
   status: "active" | "win" | "loss";
+  /** Instrument saat sinyal dibuat — mencegah posisi BTC muncul di chart Gold */
+  instrumentId?: string;
   closePrice?: number;
   closeTime?: number;
 }

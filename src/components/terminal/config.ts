@@ -392,7 +392,7 @@ export const INSTRUMENTS: Record<string, Instrument> = {
 };
 
 // ─── Default Instrument ───────────────────────────────────────────────────────
-export const DEFAULT_INSTRUMENT_ID = "BTCUSDT";
+export const DEFAULT_INSTRUMENT_ID = "XAUUSD";
 
 // ─── Helper: Get instruments by category ──────────────────────────────────────
 export function getInstrumentsByCategory(category: InstrumentCategory): Instrument[] {
@@ -403,6 +403,15 @@ export function getInstrumentsByCategory(category: InstrumentCategory): Instrume
 export function getInstrumentsByBroker(broker: APIProvider): Instrument[] {
   return Object.values(INSTRUMENTS).filter(i => i.broker === broker);
 }
+
+/** Ukuran 1 pip per kategori — untuk kalkulasi lot/pip di sidebar */
+export const PIP_SIZE_BY_CATEGORY: Record<InstrumentCategory, number> = {
+  crypto: 1,
+  forex: 0.0001,
+  commodities: 0.01,
+  stocks: 0.01,
+  indices: 1,
+};
 
 // ─── Category Labels ──────────────────────────────────────────────────────────
 export const CATEGORY_LABELS: Record<InstrumentCategory, string> = {
@@ -477,7 +486,7 @@ export const API_CONFIG = API_PROVIDER === "BINANCE"
 export const TRADING_CONFIG = {
   INITIAL_CAPITAL: 20,        // Modal awal (USD)
   LOT_UNIT: 0.001,           // Unit lot untuk perhitungan size
-  MIN_CANDLES: 30,           // Minimum candles untuk deteksi sinyal
+  MIN_CANDLES: 200,          // = EMA_LONG — skor & sinyal butuh EMA 200 valid
   MAX_SIGNALS_HISTORY: 20,   // Maximum signals dalam history
   CANDLE_DISPLAY_COUNT: 80,  // Jumlah candles di chart
   MAX_CANDLES_BUFFER: 300,   // Minimum ~EMA_LONG+margin untuk EMA 200 akurat
@@ -535,6 +544,11 @@ export const SIGNAL_CONFIG = {
 
   // Support/Resistance proximity (dalam ATR)
   SR_PROXIMITY_ATR: 0.8,
+
+  // Gate sinyal — skor harus unggul & RSI tidak ekstrem
+  SIGNAL_EDGE: 0.5,
+  RSI_BUY_MAX: 78,
+  RSI_SELL_MIN: 22,
 } as const;
 
 // ─── Score Weights ────────────────────────────────────────────────────────────
@@ -560,6 +574,72 @@ export const RSI_CONFIG = {
   OVERBOUGHT_STRONG: 70,
   OVERBOUGHT_MODERATE: 60,
 } as const;
+
+/** Maksimum skor per sisi — jumlah bobot semua faktor */
+export const MAX_SCORE =
+  SCORE_WEIGHTS.EMA_CROSS +
+  SCORE_WEIGHTS.EMA_TREND +
+  SCORE_WEIGHTS.PRICE_VS_EMA +
+  SCORE_WEIGHTS.MACD +
+  SCORE_WEIGHTS.RSI_STRONG +
+  SCORE_WEIGHTS.VOLUME +
+  SCORE_WEIGHTS.PATTERN +
+  SCORE_WEIGHTS.HTF_TREND +
+  SCORE_WEIGHTS.KEY_LEVEL;
+
+/** Klasifikasi kekuatan skor (dalam poin mentah, bukan %) */
+export const STRENGTH_CONFIG = {
+  STRONG_MIN: 6,
+  MODERATE_MIN: 3,
+} as const;
+
+/** Map durasi candle (ms) → key timeframe untuk BASE_THRESHOLD */
+export function candleDurationToTfKey(durationMs: number): TimeframeKey {
+  if (durationMs <= 60_000) return "1m";
+  if (durationMs <= 300_000) return "5m";
+  if (durationMs <= 900_000) return "15m";
+  if (durationMs <= 3_600_000) return "1H";
+  if (durationMs <= 14_400_000) return "4H";
+  if (durationMs <= 86_400_000) return "1D";
+  return "1W";
+}
+
+export function getSignalCooldownMs(candleDurationMs: number): number {
+  const { COOLDOWN_MULTIPLIER, MIN_COOLDOWN_MS } = SIGNAL_CONFIG;
+  if (candleDurationMs <= 60_000) {
+    return Math.max(candleDurationMs * COOLDOWN_MULTIPLIER.SHORT, MIN_COOLDOWN_MS.SHORT);
+  }
+  if (candleDurationMs <= 300_000) {
+    return Math.max(candleDurationMs * COOLDOWN_MULTIPLIER.MEDIUM, MIN_COOLDOWN_MS.MEDIUM);
+  }
+  return Math.max(candleDurationMs * COOLDOWN_MULTIPLIER.LONG, MIN_COOLDOWN_MS.MEDIUM);
+}
+
+export function getScoreColor(pct: number): string {
+  if (pct >= TIER_CONFIG.T1_THRESHOLD) return "#22c55e";
+  if (pct >= TIER_CONFIG.T2_THRESHOLD) return "#00d4e8";
+  if (pct >= TIER_CONFIG.T3_THRESHOLD) return "#f97316";
+  if (pct >= TIER_CONFIG.T4_THRESHOLD) return "#f59e0b";
+  return "#ef4444";
+}
+
+export function getScoreTier(pct: number): {
+  tier: string; label: string; stars: number; color: string;
+} {
+  if (pct >= TIER_CONFIG.T1_THRESHOLD) {
+    return { tier: "T1", label: "STRONG", stars: 5, color: "#22c55e" };
+  }
+  if (pct >= TIER_CONFIG.T2_THRESHOLD) {
+    return { tier: "T2", label: "CONFIRM", stars: 4, color: "#00d4e8" };
+  }
+  if (pct >= TIER_CONFIG.T3_THRESHOLD) {
+    return { tier: "T3", label: "WATCH", stars: 3, color: "#f97316" };
+  }
+  if (pct >= TIER_CONFIG.T4_THRESHOLD) {
+    return { tier: "T4", label: "WEAK", stars: 2, color: "#f59e0b" };
+  }
+  return { tier: "T5", label: "AVOID", stars: 1, color: "#ef4444" };
+}
 
 // ─── Chart Display Settings ───────────────────────────────────────────────────
 export const CHART_CONFIG = {

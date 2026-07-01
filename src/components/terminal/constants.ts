@@ -19,4 +19,15 @@ export const HTF_MAP: Record<string, string> = {
   "1W":  "1w",
 };
 
+/** Higher timeframe keys for Saxo chart API (matches SAXO_HORIZONS casing) */
+export const HTF_SAXO_TF: Record<string, string> = {
+  "1m":  "15m",
+  "5m":  "1H",
+  "15m": "4H",
+  "1H":  "1D",
+  "4H":  "1D",
+  "1D":  "1W",
+  "1W":  "1W",
+};
+
 export const TIMEFRAMES = ["1m", "5m", "15m", "1H", "4H", "1D", "1W"];

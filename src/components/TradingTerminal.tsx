@@ -264,7 +264,7 @@ export default function TradingTerminal() {
     ema50Value, ema200Value,
     macdValue, macdSignalValue,
     scoreBreakdown,
-  } = useSignals(candles, htfTrend);
+  } = useSignals(candles, htfTrend, instrumentId);
   const macdBull = macdValue > macdSignalValue;
 
   const formatPrice = (p:number) =>
@@ -535,6 +535,7 @@ export default function TradingTerminal() {
           signals={signals}
           currentPrice={currentPrice}
           formatPrice={formatPrice}
+          instrument={instrument}
           isFullscreen={isFullscreen}
         />
 

@@ -1,5 +1,8 @@
 import { Candle, Signal } from "./types";
-import { INDICATOR_CONFIG } from "./config";
+import {
+  INDICATOR_CONFIG, SCORE_WEIGHTS, RSI_CONFIG, SIGNAL_CONFIG,
+  MAX_SCORE, STRENGTH_CONFIG, candleDurationToTfKey, getSignalCooldownMs,
+} from "./config";
 
 export function calcEMA(closes: number[], period: number): number[] {
   const ema: number[] = [];
@@ -115,55 +118,170 @@ export interface ScoreBreakdown {
   buyScore: number; sellScore: number; items: ScoreItem[];
   bias: "BUY" | "SELL" | "NEUTRAL"; strength: "STRONG" | "MODERATE" | "WEAK";
 }
-export const MAX_SCORE = 12.5;
 
-export function calcScores(candles: Candle[], htfTrend: "bullish"|"bearish"|"neutral"): ScoreBreakdown {
-  const empty: ScoreBreakdown = { buyScore:0, sellScore:0, items:[], bias:"NEUTRAL", strength:"WEAK" };
-  if (candles.length < INDICATOR_CONFIG.EMA_LONG) return empty;
-  const closes = candles.map(c => c.close);
-  const ema50 = calcEMA(closes, INDICATOR_CONFIG.EMA_SHORT);
+export { MAX_SCORE };
+
+interface ScoreComputeResult extends ScoreBreakdown {
+  reasons: string[];
+  currentRSI: number;
+  atr: number;
+}
+
+/** HTF trend dari array close — dipakai Binance & Saxo */
+export function computeHtfTrendFromCloses(closes: number[]): "bullish" | "bearish" | "neutral" {
+  if (closes.length < INDICATOR_CONFIG.EMA_LONG) return "neutral";
+  const ema50  = calcEMA(closes, INDICATOR_CONFIG.EMA_SHORT);
   const ema200 = calcEMA(closes, INDICATOR_CONFIG.EMA_LONG);
-  const rsi  = calcRSI(closes);
+  const last   = closes.length - 1;
+  if (ema50[last] > ema200[last] && closes[last] > ema50[last]) return "bullish";
+  if (ema50[last] < ema200[last] && closes[last] < ema50[last]) return "bearish";
+  return "neutral";
+}
+
+function classifyStrength(top: number): ScoreBreakdown["strength"] {
+  if (top >= STRENGTH_CONFIG.STRONG_MIN) return "STRONG";
+  if (top >= STRENGTH_CONFIG.MODERATE_MIN) return "MODERATE";
+  return "WEAK";
+}
+
+/** Satu sumber kebenaran — UI score & signal engine memakai fungsi yang sama */
+function computeScoreBreakdown(
+  candles: Candle[],
+  htfTrend: "bullish" | "bearish" | "neutral",
+  collectReasons = false,
+): ScoreComputeResult | null {
+  if (candles.length < INDICATOR_CONFIG.EMA_LONG) return null;
+
+  const closes = candles.map(c => c.close);
+  const ema50  = calcEMA(closes, INDICATOR_CONFIG.EMA_SHORT);
+  const ema200 = calcEMA(closes, INDICATOR_CONFIG.EMA_LONG);
+  const rsi    = calcRSI(closes);
   const { histogram } = calcMACD(closes);
-  const len = closes.length, i = len - 1, prev = len - 2;
-  if (prev < 1) return empty;
+
+  const len = closes.length;
+  const i   = len - 1;
+  const prev = len - 2;
+  if (prev < 1) return null;
+
   const currentRSI = rsi[i];
   const volConf    = isVolumeConfirmed(candles, i);
   const isBuyCan   = candles[i].close >= candles[i].open;
-  const pattern    = detectCandlePattern(candles, i);
+  const pattern    = detectCandlePattern(candles, i) ?? detectCandlePattern(candles, i - 1);
   const macdBull   = histogram[i] > 0 && histogram[i] > histogram[prev];
   const macdBear   = histogram[i] < 0 && histogram[i] < histogram[prev];
-  const atr        = calcATR(candles, 14);
-  const { highs, lows } = findSwingLevels(candles, 80);
-  const nearSup = lows.some(l  => Math.abs(closes[i] - l)  <= atr * 0.8);
-  const nearRes = highs.some(h => Math.abs(closes[i] - h) <= atr * 0.8);
+  const atr        = calcATR(candles, INDICATOR_CONFIG.ATR_PERIOD);
+  const { highs, lows } = findSwingLevels(candles, INDICATOR_CONFIG.SWING_LOOKBACK);
+  const srAtr      = SIGNAL_CONFIG.SR_PROXIMITY_ATR;
+  const nearSup    = lows.some(l  => Math.abs(closes[i] - l)  <= atr * srAtr);
+  const nearRes    = highs.some(h => Math.abs(closes[i] - h) <= atr * srAtr);
+
   const items: ScoreItem[] = [];
-  let buyScore = 0, sellScore = 0;
+  const reasons: string[] = [];
+  let buyScore = 0;
+  let sellScore = 0;
+
   const add = (name: string, b: number, s: number, max: number) => {
-    buyScore += b; sellScore += s;
+    buyScore += b;
+    sellScore += s;
     items.push({ name, buyContrib: b, sellContrib: s, maxPossible: max });
   };
-  let bc = 0, sc = 0;
+  const note = (text: string) => { if (collectReasons) reasons.push(text); };
+
+  let bc = 0;
+  let sc = 0;
   for (let j = Math.max(2, i - 4); j <= i; j++) {
-    if (ema50[j-1] <= ema200[j-1] && ema50[j] > ema200[j]) bc = 2;
-    if (ema50[j-1] >= ema200[j-1] && ema50[j] < ema200[j]) sc = 2;
+    if (ema50[j - 1] <= ema200[j - 1] && ema50[j] > ema200[j]) bc = SCORE_WEIGHTS.EMA_CROSS;
+    if (ema50[j - 1] >= ema200[j - 1] && ema50[j] < ema200[j]) sc = SCORE_WEIGHTS.EMA_CROSS;
   }
-  add("EMA Cross", bc, sc, 2);
-  add("EMA Trend", ema50[i]>ema200[i]?1:0, ema50[i]<ema200[i]?1:0, 1);
-  add("Price/EMA", (closes[i]>ema50[i]&&closes[i]>ema200[i])?1:0, (closes[i]<ema50[i]&&closes[i]<ema200[i])?1:0, 1);
-  add("MACD",
-    macdBull?1:(!macdBull&&histogram[i]>histogram[prev]?0.5:0),
-    macdBear?1:(!macdBear&&histogram[i]<histogram[prev]?0.5:0), 1);
-  add("RSI", currentRSI<30?2:currentRSI<40?1:0, currentRSI>70?2:currentRSI>60?1:0, 2);
-  add("Volume", (volConf&&isBuyCan)?1:0, (volConf&&!isBuyCan)?1:0, 1);
-  add("Pattern",
-    (pattern==="bullish_engulfing"||pattern==="hammer")?2:pattern==="doji"?0.5:0,
-    (pattern==="bearish_engulfing"||pattern==="shooting_star")?2:pattern==="doji"?0.5:0, 2);
-  add("HTF Trend", htfTrend==="bullish"?1.5:0, htfTrend==="bearish"?1.5:0, 1.5);
-  add("Key Level", nearSup?1:0, nearRes?1:0, 1);
-  const bias = buyScore>sellScore?"BUY":sellScore>buyScore?"SELL":"NEUTRAL";
+  add("EMA Cross", bc, sc, SCORE_WEIGHTS.EMA_CROSS);
+  if (bc) note("EMA×↑");
+  if (sc) note("EMA×↓");
+
+  const emaTrendB = ema50[i] > ema200[i] ? SCORE_WEIGHTS.EMA_TREND : 0;
+  const emaTrendS = ema50[i] < ema200[i] ? SCORE_WEIGHTS.EMA_TREND : 0;
+  add("EMA Trend", emaTrendB, emaTrendS, SCORE_WEIGHTS.EMA_TREND);
+
+  const priceB = closes[i] > ema50[i] && closes[i] > ema200[i] ? SCORE_WEIGHTS.PRICE_VS_EMA : 0;
+  const priceS = closes[i] < ema50[i] && closes[i] < ema200[i] ? SCORE_WEIGHTS.PRICE_VS_EMA : 0;
+  add("Price/EMA", priceB, priceS, SCORE_WEIGHTS.PRICE_VS_EMA);
+  if (priceB) note("P>EMA");
+  if (priceS) note("P<EMA");
+
+  const macdB = macdBull
+    ? SCORE_WEIGHTS.MACD
+    : (!macdBull && histogram[i] > histogram[prev] ? SCORE_WEIGHTS.MACD_WEAK : 0);
+  const macdS = macdBear
+    ? SCORE_WEIGHTS.MACD
+    : (!macdBear && histogram[i] < histogram[prev] ? SCORE_WEIGHTS.MACD_WEAK : 0);
+  add("MACD", macdB, macdS, SCORE_WEIGHTS.MACD);
+  if (macdBull) note("MACD↑");
+  if (macdBear) note("MACD↓");
+
+  let rsiB = 0;
+  let rsiS = 0;
+  if (currentRSI < RSI_CONFIG.OVERSOLD_STRONG) {
+    rsiB = SCORE_WEIGHTS.RSI_STRONG;
+  } else if (currentRSI < RSI_CONFIG.OVERSOLD_MODERATE) {
+    rsiB = SCORE_WEIGHTS.RSI_MODERATE;
+  }
+  if (currentRSI > RSI_CONFIG.OVERBOUGHT_STRONG) {
+    rsiS = SCORE_WEIGHTS.RSI_STRONG;
+  } else if (currentRSI > RSI_CONFIG.OVERBOUGHT_MODERATE) {
+    rsiS = SCORE_WEIGHTS.RSI_MODERATE;
+  }
+  add("RSI", rsiB, rsiS, SCORE_WEIGHTS.RSI_STRONG);
+  if (rsiB || rsiS) note(`RSI${currentRSI.toFixed(0)}`);
+
+  const volB = volConf && isBuyCan ? SCORE_WEIGHTS.VOLUME : 0;
+  const volS = volConf && !isBuyCan ? SCORE_WEIGHTS.VOLUME : 0;
+  add("Volume", volB, volS, SCORE_WEIGHTS.VOLUME);
+  if (volB) note("Vol↑");
+  if (volS) note("Vol↓");
+
+  let patB = 0;
+  let patS = 0;
+  if (pattern === "bullish_engulfing" || pattern === "hammer") {
+    patB = SCORE_WEIGHTS.PATTERN;
+    note(pattern === "hammer" ? "Hammer" : "BullEng");
+  }
+  if (pattern === "bearish_engulfing" || pattern === "shooting_star") {
+    patS = SCORE_WEIGHTS.PATTERN;
+    note(pattern === "shooting_star" ? "ShootStar" : "BearEng");
+  }
+  if (pattern === "doji") {
+    patB = SCORE_WEIGHTS.PATTERN_WEAK;
+    patS = SCORE_WEIGHTS.PATTERN_WEAK;
+  }
+  add("Pattern", patB, patS, SCORE_WEIGHTS.PATTERN);
+
+  const htfB = htfTrend === "bullish" ? SCORE_WEIGHTS.HTF_TREND : 0;
+  const htfS = htfTrend === "bearish" ? SCORE_WEIGHTS.HTF_TREND : 0;
+  add("HTF Trend", htfB, htfS, SCORE_WEIGHTS.HTF_TREND);
+  if (htfB) note("HTF↑");
+  if (htfS) note("HTF↓");
+
+  const lvlB = nearSup ? SCORE_WEIGHTS.KEY_LEVEL : 0;
+  const lvlS = nearRes ? SCORE_WEIGHTS.KEY_LEVEL : 0;
+  add("Key Level", lvlB, lvlS, SCORE_WEIGHTS.KEY_LEVEL);
+  if (lvlB) note("@Sup");
+  if (lvlS) note("@Res");
+
+  const bias = buyScore > sellScore ? "BUY" : sellScore > buyScore ? "SELL" : "NEUTRAL";
   const top  = Math.max(buyScore, sellScore);
-  return { buyScore, sellScore, items, bias, strength: top>=6?"STRONG":top>=3?"MODERATE":"WEAK" };
+
+  return {
+    buyScore, sellScore, items, bias,
+    strength: classifyStrength(top),
+    reasons, currentRSI, atr,
+  };
+}
+
+export function calcScores(candles: Candle[], htfTrend: "bullish" | "bearish" | "neutral"): ScoreBreakdown {
+  const empty: ScoreBreakdown = { buyScore: 0, sellScore: 0, items: [], bias: "NEUTRAL", strength: "WEAK" };
+  const result = computeScoreBreakdown(candles, htfTrend, false);
+  if (!result) return empty;
+  const { buyScore, sellScore, items, bias, strength } = result;
+  return { buyScore, sellScore, items, bias, strength };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -192,42 +310,25 @@ export function detectSignals(
   recentSignals: Signal[] = []
 ): Signal | null {
 
-  if (candles.length < INDICATOR_CONFIG.EMA_LONG) return null;
   if (activeSignals.length > 0) return null;
 
-  const closes = candles.map(c => c.close);
-  const ema50   = calcEMA(closes, INDICATOR_CONFIG.EMA_SHORT);
-  const ema200  = calcEMA(closes, INDICATOR_CONFIG.EMA_LONG);
-  const rsi    = calcRSI(closes);
-  const { histogram } = calcMACD(closes);
+  const score = computeScoreBreakdown(candles, htfTrend, true);
+  if (!score) return null;
 
-  const len  = closes.length;
-  const i    = len - 1;
-  const prev = len - 2;
-  if (prev < 1) return null;
-
-  const lastCandle     = candles[i];
+  const { buyScore, sellScore, reasons, currentRSI, atr } = score;
+  const lastCandle     = candles[candles.length - 1];
   const candleDuration = candles.length >= 2 ? candles[1].time - candles[0].time : 60_000;
-  const atr            = calcATR(candles, 14);
+  const entry          = lastCandle.close;
 
-  // ── Cooldown ──────────────────────────────────────────────────────────────
-  const cooldownMs =
-    candleDuration <= 60_000  ? Math.max(candleDuration * 2, 90_000)
-  : candleDuration <= 300_000 ? Math.max(candleDuration * 3, 180_000)
-  :                             Math.max(candleDuration * 5, 180_000);
+  const cooldownMs = getSignalCooldownMs(candleDuration);
   if (lastCandle.time - prevSignalTime < cooldownMs) return null;
 
-  // ── FIX BUG 2: Price separation — dikurangi ke 0.3× ATR ──────────────────
-  // Hanya cegah re-entry di candle yang SAMA atau harga yang SAMA PERSIS
-  // Tidak perlu $300 separation — cukup sedikit bergerak dari entry lama
   const lastClosed = recentSignals.find(s => s.status !== "active");
   if (lastClosed) {
-    const dist = Math.abs(closes[i] - lastClosed.price);
-    if (dist < atr * 0.3) return null; // hanya skip jika harga hampir sama persis
+    const dist = Math.abs(entry - lastClosed.price);
+    if (dist < atr * SIGNAL_CONFIG.PRICE_SEPARATION_ATR_MULTIPLIER) return null;
   }
 
-  // ── FIX BUG 1: Consecutive direction — TIDAK ada hard block ──────────────
-  // Hanya tambah extra score requirement, tidak pernah blocked total
   const last5 = recentSignals.filter(s => s.status !== "active").slice(0, 5);
   const getStreak = (dir: "BUY" | "SELL") => {
     let n = 0;
@@ -236,99 +337,25 @@ export function detectSignals(
   };
   const streakBuy  = getStreak("BUY");
   const streakSell = getStreak("SELL");
+  const { STREAK_PENALTY_PER_SIGNAL, MAX_STREAK_PENALTY } = SIGNAL_CONFIG;
 
-  // Extra score berdasarkan streak — semakin panjang semakin butuh konfirmasi kuat
-  // Tidak ada hard block, hanya threshold naik
-  const extraBuy  = streakBuy  >= 2 ? Math.min(streakBuy  - 1, 3) * 0.8 : 0;
-  const extraSell = streakSell >= 2 ? Math.min(streakSell - 1, 3) * 0.8 : 0;
+  const extraBuy  = streakBuy  >= 2
+    ? Math.min(streakBuy  - 1, MAX_STREAK_PENALTY) * STREAK_PENALTY_PER_SIGNAL : 0;
+  const extraSell = streakSell >= 2
+    ? Math.min(streakSell - 1, MAX_STREAK_PENALTY) * STREAK_PENALTY_PER_SIGNAL : 0;
 
-  // ── Swing levels — bonus saja, TIDAK ada penalty ──────────────────────────
-  const { highs: swingHighs, lows: swingLows } = findSwingLevels(candles, 80);
-  const nearSupport    = swingLows.some(l  => Math.abs(closes[i] - l)  <= atr * 0.8);
-  const nearResistance = swingHighs.some(h => Math.abs(closes[i] - h) <= atr * 0.8);
+  const tfKey    = candleDurationToTfKey(candleDuration);
+  const baseMin  = SIGNAL_CONFIG.BASE_THRESHOLD[tfKey] ?? 3;
+  const buyMin   = baseMin + extraBuy;
+  const sellMin  = baseMin + extraSell;
+  const edge     = SIGNAL_CONFIG.SIGNAL_EDGE;
 
-  // ── Scoring ───────────────────────────────────────────────────────────────
-  const currentRSI = rsi[i];
-  const volConf    = isVolumeConfirmed(candles, i);
-  const isBuyCan   = candles[i].close >= candles[i].open;
-  const pattern    = detectCandlePattern(candles, i) ?? detectCandlePattern(candles, i - 1);
-  const macdBull   = histogram[i] > 0 && histogram[i] > histogram[prev];
-  const macdBear   = histogram[i] < 0 && histogram[i] < histogram[prev];
-
-  let buyScore = 0, sellScore = 0;
-  const reasons: string[] = [];
-
-  // 1. EMA Cross (5 candles terakhir)
-  let bullCross = false, bearCross = false;
-  for (let j = Math.max(2, i - 4); j <= i; j++) {
-    if (ema50[j-1] <= ema200[j-1] && ema50[j] > ema200[j]) bullCross = true;
-    if (ema50[j-1] >= ema200[j-1] && ema50[j] < ema200[j]) bearCross = true;
-  }
-  if (bullCross) { buyScore  += 2; reasons.push("EMA×↑"); }
-  if (bearCross) { sellScore += 2; reasons.push("EMA×↓"); }
-
-  // 2. EMA Trend
-  if (ema50[i] > ema200[i]) buyScore  += 1;
-  if (ema50[i] < ema200[i]) sellScore += 1;
-
-  // 3. Price vs EMA
-  if (closes[i] > ema50[i] && closes[i] > ema200[i]) { buyScore  += 1; reasons.push("P>EMA"); }
-  if (closes[i] < ema50[i] && closes[i] < ema200[i]) { sellScore += 1; reasons.push("P<EMA"); }
-
-  // 4. MACD
-  if (macdBull)  { buyScore  += 1;   reasons.push("MACD↑"); }
-  if (macdBear)  { sellScore += 1;   reasons.push("MACD↓"); }
-  if (!macdBull && histogram[i] > histogram[prev]) buyScore  += 0.5;
-  if (!macdBear && histogram[i] < histogram[prev]) sellScore += 0.5;
-
-  // 5. RSI
-  if      (currentRSI < 30) { buyScore  += 2; reasons.push(`RSI${currentRSI.toFixed(0)}`); }
-  else if (currentRSI < 40) { buyScore  += 1; reasons.push(`RSI${currentRSI.toFixed(0)}`); }
-  if      (currentRSI > 70) { sellScore += 2; reasons.push(`RSI${currentRSI.toFixed(0)}`); }
-  else if (currentRSI > 60) { sellScore += 1; reasons.push(`RSI${currentRSI.toFixed(0)}`); }
-
-  // 6. Volume directional
-  if (volConf) {
-    if (isBuyCan)  { buyScore  += 1; reasons.push("Vol↑"); }
-    else           { sellScore += 1; reasons.push("Vol↓"); }
-  }
-
-  // 7. Pattern
-  if (pattern === "bullish_engulfing" || pattern === "hammer") {
-    buyScore  += 2; reasons.push(pattern === "hammer" ? "Hammer" : "BullEng");
-  }
-  if (pattern === "bearish_engulfing" || pattern === "shooting_star") {
-    sellScore += 2; reasons.push(pattern === "shooting_star" ? "ShootStar" : "BearEng");
-  }
-  if (pattern === "doji") { buyScore += 0.5; sellScore += 0.5; }
-
-  // 8. HTF
-  if (htfTrend === "bullish") { buyScore  += 1.5; reasons.push("HTF↑"); }
-  if (htfTrend === "bearish") { sellScore += 1.5; reasons.push("HTF↓"); }
-
-  // 9. Key Level bonus (TIDAK ada penalty jika tidak di level)
-  if (nearSupport)    { buyScore  += 1; reasons.push("@Sup"); }
-  if (nearResistance) { sellScore += 1; reasons.push("@Res"); }
-
-  // ── FIX BUG 3: MIN_SCORE tanpa area penalty ───────────────────────────────
-  const BASE_SCORE =
-    candleDuration <= 60_000  ? 2
-  : candleDuration <= 300_000 ? 2.5
-  :                             3;
-
-  // Extra score hanya dari streak (tidak dari area)
-  const buyMin  = BASE_SCORE + extraBuy;
-  const sellMin = BASE_SCORE + extraSell;
-
-  const entry = closes[i];
-
-  // ── Generate Signal ───────────────────────────────────────────────────────
-  if (buyScore >= buyMin && buyScore > sellScore + 0.5 && currentRSI < 78) {
+  if (buyScore >= buyMin && buyScore > sellScore + edge && currentRSI < SIGNAL_CONFIG.RSI_BUY_MAX) {
     return {
       type:   "BUY",
       price:  entry,
-      sl:     entry - atr * 1.5,
-      tp:     entry + atr * 2.5,
+      sl:     entry - atr * SIGNAL_CONFIG.SL_MULTIPLIER,
+      tp:     entry + atr * SIGNAL_CONFIG.TP_MULTIPLIER,
       rsi:    currentRSI,
       reason: reasons.join(" • "),
       time:   lastCandle.time,
@@ -336,12 +363,12 @@ export function detectSignals(
     };
   }
 
-  if (sellScore >= sellMin && sellScore > buyScore + 0.5 && currentRSI > 22) {
+  if (sellScore >= sellMin && sellScore > buyScore + edge && currentRSI > SIGNAL_CONFIG.RSI_SELL_MIN) {
     return {
       type:   "SELL",
       price:  entry,
-      sl:     entry + atr * 1.5,
-      tp:     entry - atr * 2.5,
+      sl:     entry + atr * SIGNAL_CONFIG.SL_MULTIPLIER,
+      tp:     entry - atr * SIGNAL_CONFIG.TP_MULTIPLIER,
       rsi:    currentRSI,
       reason: reasons.join(" • "),
       time:   lastCandle.time,

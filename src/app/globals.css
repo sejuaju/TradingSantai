@@ -118,3 +118,30 @@ html { scroll-behavior: smooth; }
 .lab-step-active {
   box-shadow: 0 0 0 1px rgba(99,102,241,0.4), 0 0 16px -4px rgba(99,102,241,0.5);
 }
+
+/* Strategy Lab — professional workbench */
+.lab-page {
+  overflow: hidden;
+  background-color: #080809;
+  background-image:
+    radial-gradient(ellipse 80% 50% at 50% -20%, rgba(34, 197, 94, 0.08), transparent),
+    linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  background-size: 100% 100%, 48px 48px, 48px 48px;
+}
+
+.lab-workbench {
+  background: linear-gradient(180deg, rgba(18, 18, 20, 0.98) 0%, rgba(10, 10, 11, 0.99) 100%);
+}
+
+.lab-editor-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.lab-editor-scroll::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.3);
+}
+.lab-editor-scroll::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
