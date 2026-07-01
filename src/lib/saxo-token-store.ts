@@ -149,22 +149,29 @@ export async function getDemoRefreshToken(): Promise<string | null> {
   }
 
   const fromRedis = await redisGet();
+  const fromEnv = envSeedToken();
+  const fromFile = readDemoToken()?.refreshToken ?? null;
+
+  // Env var sengaja di-set admin → kalahkan file lokal yang mungkin sudah basi
+  if (fromEnv && fromEnv !== fromRedis) {
+    memoryCache = { token: fromEnv, updatedAt: now };
+    await redisSet(fromEnv);
+    return fromEnv;
+  }
+
   if (fromRedis) {
     memoryCache = { token: fromRedis, updatedAt: now };
     return fromRedis;
   }
 
-  const fromFile = readDemoToken();
-  if (fromFile?.refreshToken) {
-    memoryCache = { token: fromFile.refreshToken, updatedAt: now };
-    await redisSet(fromFile.refreshToken);
-    return fromFile.refreshToken;
+  if (fromFile) {
+    memoryCache = { token: fromFile, updatedAt: now };
+    await redisSet(fromFile);
+    return fromFile;
   }
 
-  const fromEnv = envSeedToken();
   if (fromEnv) {
     memoryCache = { token: fromEnv, updatedAt: now };
-    // Seed Redis dari env — sekali saja sampai Saxo rotate
     await redisSet(fromEnv);
     return fromEnv;
   }
