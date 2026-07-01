@@ -6,7 +6,8 @@ import { NextResponse } from "next/server";
 import {
   getDemoRefreshToken,
   setDemoRefreshToken,
-  isDemoRefreshConfigured,
+  isDemoRefreshReady,
+  acquireDemoRefreshLock,
 } from "@/lib/saxo-token-store";
 
 const IS_LIVE = process.env.NEXT_PUBLIC_SAXO_ENVIRONMENT === "LIVE";
@@ -14,15 +15,16 @@ const SAXO_AUTH_URL = IS_LIVE
   ? "https://live.logonvalidation.net"
   : "https://sim.logonvalidation.net";
 
-const CACHE_BUFFER_MS = 120_000; // refresh Saxo hanya ~2 menit sebelum access token habis
+const CACHE_BUFFER_MS = 120_000;
 
 let cachedAccess: { accessToken: string; expiresAt: number } | null = null;
 let refreshInFlight: Promise<{ accessToken: string } | null> | null = null;
 
-async function fetchFreshAccessToken(): Promise<{ accessToken: string } | null> {
-  const refreshToken = await getDemoRefreshToken();
-  if (!refreshToken) return null;
-
+async function exchangeRefreshToken(refreshToken: string): Promise<{
+  accessToken: string;
+  refreshToken?: string;
+  expiresIn: number;
+} | null> {
   const appKey = process.env.NEXT_PUBLIC_SAXO_APP_KEY;
   const appSecret = process.env.SAXO_APP_SECRET;
   if (!appKey || !appSecret) return null;
@@ -45,19 +47,37 @@ async function fetchFreshAccessToken(): Promise<{ accessToken: string } | null> 
   }
 
   const data = await res.json();
-
-  if (data.refresh_token && data.refresh_token !== refreshToken) {
-    await setDemoRefreshToken(data.refresh_token);
-  }
-
-  const accessToken = data.access_token as string;
-  cachedAccess = {
-    accessToken,
-    expiresAt: Date.now() + (data.expires_in ?? 1200) * 1000,
+  return {
+    accessToken: data.access_token as string,
+    refreshToken: data.refresh_token as string | undefined,
+    expiresIn: (data.expires_in ?? 1200) as number,
   };
+}
 
-  console.log(`[GuestToken] Access token di-refresh, valid ~${data.expires_in ?? 1200}s`);
-  return { accessToken };
+async function fetchFreshAccessToken(): Promise<{ accessToken: string } | null> {
+  const release = await acquireDemoRefreshLock();
+  try {
+    // Baca ulang dari Redis — instance lain mungkin sudah rotate token
+    const refreshToken = await getDemoRefreshToken();
+    if (!refreshToken) return null;
+
+    const data = await exchangeRefreshToken(refreshToken);
+    if (!data) return null;
+
+    if (data.refreshToken && data.refreshToken !== refreshToken) {
+      await setDemoRefreshToken(data.refreshToken);
+    }
+
+    cachedAccess = {
+      accessToken: data.accessToken,
+      expiresAt: Date.now() + data.expiresIn * 1000,
+    };
+
+    console.log(`[GuestToken] Access token di-refresh, valid ~${data.expiresIn}s`);
+    return { accessToken: data.accessToken };
+  } finally {
+    await release();
+  }
 }
 
 function getCachedAccess(): string | null {
@@ -80,12 +100,12 @@ async function getDemoAccessToken(): Promise<{ accessToken: string } | null> {
 }
 
 export async function GET() {
-  const configured = isDemoRefreshConfigured();
-  if (!configured) {
+  const ready = await isDemoRefreshReady();
+  if (!ready) {
     return NextResponse.json(
       {
         error: "Demo token belum dikonfigurasi",
-        hint: "Set SAXO_DEMO_REFRESH_TOKEN di Vercel + aktifkan Vercel KV, atau login sekali di localhost",
+        hint: "Set SAXO_DEMO_REFRESH_TOKEN + connect Upstash Redis di Vercel, lalu redeploy",
         configured: false,
       },
       { status: 503 },
@@ -98,7 +118,7 @@ export async function GET() {
       return NextResponse.json(
         {
           error: "Demo token kadaluarsa atau tidak valid",
-          hint: "Login ulang Saxo, update SAXO_DEMO_REFRESH_TOKEN, pastikan Vercel KV aktif",
+          hint: "Login Saxo sekali, copy refresh_token baru ke SAXO_DEMO_REFRESH_TOKEN, redeploy",
         },
         { status: 401 },
       );
@@ -115,9 +135,14 @@ export async function GET() {
 }
 
 export async function HEAD() {
-  const configured = isDemoRefreshConfigured();
+  const ready = await isDemoRefreshReady();
   return new NextResponse(null, {
-    status: configured ? 200 : 503,
-    headers: { "x-demo-configured": configured ? "true" : "false" },
+    status: ready ? 200 : 503,
+    headers: {
+      "x-demo-configured": ready ? "true" : "false",
+      "x-redis-connected": (
+        Boolean(process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL)
+      ) ? "true" : "false",
+    },
   });
 }
