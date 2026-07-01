@@ -261,7 +261,7 @@ export default function TradingTerminal() {
   };
   const {
     signals, rsiValue,
-    ema9Value, ema21Value,
+    ema50Value, ema200Value,
     macdValue, macdSignalValue,
     scoreBreakdown,
   } = useSignals(candles, htfTrend);
@@ -468,7 +468,7 @@ export default function TradingTerminal() {
               </div>
 
               <div style={{ display:"flex", gap:6 }}>
-                <Pill label="EMA"  bull={ema9Value>ema21Value} icon={ema9Value>ema21Value?"▲":"▼"}/>
+                <Pill label="EMA"  bull={ema50Value>ema200Value} icon={ema50Value>ema200Value?"▲":"▼"}/>
                 <Pill label={`MACD ${macdBull?"↑":"↓"}`} bull={macdBull}/>
                 <RsiPill rsi={rsiValue}/>
               </div>

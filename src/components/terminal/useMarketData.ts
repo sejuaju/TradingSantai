@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect, useMemo } from "react";
 import { Candle } from "./types";
 import { TF_MAP, HTF_MAP } from "./constants";
-import { API_CONFIG, TRADING_CONFIG, UPDATE_INTERVALS, INSTRUMENTS, DEFAULT_INSTRUMENT_ID } from "./config";
+import { API_CONFIG, TRADING_CONFIG, UPDATE_INTERVALS, INSTRUMENTS, DEFAULT_INSTRUMENT_ID, INDICATOR_CONFIG } from "./config";
 import { calcEMA } from "./indicators";
 import { getUIC } from "../../lib/saxo-uic-cache";
 import { getAccessToken } from "../../lib/saxo-auth";
@@ -200,13 +200,13 @@ export function useMarketData(instrumentId: string = DEFAULT_INSTRUMENT_ID) {
       }
       
       const closes = data.map((k: number[]) => parseFloat(String(k[4])));
-      const ema9   = calcEMA(closes, 9);
-      const ema21  = calcEMA(closes, 21);
+      const ema50   = calcEMA(closes, INDICATOR_CONFIG.EMA_SHORT);
+      const ema200  = calcEMA(closes, INDICATOR_CONFIG.EMA_LONG);
       const last   = closes.length - 1;
       
       let trend: "bullish" | "bearish" | "neutral" = "neutral";
-      if      (ema9[last] > ema21[last] && closes[last] > ema9[last]) trend = "bullish";
-      else if (ema9[last] < ema21[last] && closes[last] < ema9[last]) trend = "bearish";
+      if      (ema50[last] > ema200[last] && closes[last] > ema50[last]) trend = "bullish";
+      else if (ema50[last] < ema200[last] && closes[last] < ema50[last]) trend = "bearish";
       
       if (mountedRef.current) {
         setState(prev => ({ ...prev, htfTrend: trend }));

@@ -77,8 +77,8 @@ export function useSignals(
     if (candles.length < 2) {
       return {
         rsi: 50,
-        ema9: 0,
-        ema21: 0,
+        ema50: 0,
+        ema200: 0,
         macd: 0,
         macdSignal: 0,
         scoreBreakdown: EMPTY_BREAKDOWN,
@@ -86,8 +86,8 @@ export function useSignals(
     }
 
     const closes   = candles.map((c) => c.close);
-    const ema9Arr  = calcEMA(closes, INDICATOR_CONFIG.EMA_SHORT);
-    const ema21Arr = calcEMA(closes, INDICATOR_CONFIG.EMA_LONG);
+    const ema50Arr  = calcEMA(closes, INDICATOR_CONFIG.EMA_SHORT);
+    const ema200Arr = calcEMA(closes, INDICATOR_CONFIG.EMA_LONG);
     const rsiArr   = calcRSI(closes);
     const { macd: macdArr, signal: macdSigArr } = calcMACD(closes);
 
@@ -95,8 +95,8 @@ export function useSignals(
     
     return {
       rsi: rsiArr[len - 1],
-      ema9: ema9Arr[len - 1],
-      ema21: ema21Arr[len - 1],
+      ema50: ema50Arr[len - 1],
+      ema200: ema200Arr[len - 1],
       macd: macdArr[len - 1],
       macdSignal: macdSigArr[len - 1],
       scoreBreakdown: calcScores(candles, htfTrend), // Use prop, not ref
@@ -180,8 +180,8 @@ export function useSignals(
   return {
     signals,
     rsiValue: indicators.rsi,
-    ema9Value: indicators.ema9,
-    ema21Value: indicators.ema21,
+    ema50Value: indicators.ema50,
+    ema200Value: indicators.ema200,
     macdValue: indicators.macd,
     macdSignalValue: indicators.macdSignal,
     scoreBreakdown: indicators.scoreBreakdown,

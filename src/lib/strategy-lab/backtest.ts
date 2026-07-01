@@ -164,8 +164,8 @@ function runBarLoop(candles: Candle[], onTick: OnTickFn, inputs: Record<string, 
 /** Built-in TS SMC trial — simplified structure logic without exposing source */
 export function runBuiltinSmcTrial(candles: Candle[]): Signal[] {
   const closes = candles.map((c) => c.close);
-  const ema9 = calcEMA(closes, 9);
-  const ema21 = calcEMA(closes, 21);
+  const ema50 = calcEMA(closes, 9);
+  const ema200 = calcEMA(closes, 21);
   const rsi = calcRSI(closes);
   const signals: Signal[] = [];
   let cooldownUntil = 0;
@@ -174,8 +174,8 @@ export function runBuiltinSmcTrial(candles: Candle[]): Signal[] {
     if (candles[i].time < cooldownUntil) continue;
     const slice = candles.slice(0, i + 1);
     const atr = calcATR(slice, 14);
-    const bullTrend = ema9[i] > ema21[i];
-    const bearTrend = ema9[i] < ema21[i];
+    const bullTrend = ema50[i] > ema200[i];
+    const bearTrend = ema50[i] < ema200[i];
     const swingLow = Math.min(...candles.slice(i - 8, i + 1).map((c) => c.low));
     const nearSupport = Math.abs(candles[i].close - swingLow) <= atr * 0.6;
 
@@ -192,7 +192,7 @@ export function runBuiltinSmcTrial(candles: Candle[]): Signal[] {
         status: "active",
       });
       cooldownUntil = candles[i].time + 300_000 * 4;
-    } else if (bearTrend && rsi[i] > 58 && candles[i].close < ema21[i]) {
+    } else if (bearTrend && rsi[i] > 58 && candles[i].close < ema200[i]) {
       const entry = candles[i].close;
       signals.push({
         type: "SELL",

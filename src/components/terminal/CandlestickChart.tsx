@@ -429,8 +429,8 @@ export function CandlestickChart({ candles, signals, viewKey = "default" }: Prop
     const scaleRange = viewRange;
 
     const closes   = candles.map((c) => c.close);
-    const ema9All  = calcEMA(closes, INDICATOR_CONFIG.EMA_SHORT);
-    const ema21All = calcEMA(closes, INDICATOR_CONFIG.EMA_LONG);
+    const ema50All  = calcEMA(closes, INDICATOR_CONFIG.EMA_SHORT);
+    const ema200All = calcEMA(closes, INDICATOR_CONFIG.EMA_LONG);
     const rsiAll   = calcRSI(closes);
     const { macd: macdAll, signal: macdSigAll, histogram: histAll } = calcMACD(closes);
 
@@ -469,13 +469,13 @@ export function CandlestickChart({ candles, signals, viewKey = "default" }: Prop
     const sliceEnd   = candles.length - historyPanInt;
     const sliceStart = Math.max(0, sliceEnd - visibleCandles.length);
 
-    const ema9Points = visibleCandles.map((_, i) => {
-      const v = ema9All[sliceStart + i];
+    const ema50Points = visibleCandles.map((_, i) => {
+      const v = ema50All[sliceStart + i];
       return Number.isFinite(v) ? `${candleX(i)},${scaleY(v)}` : null;
     }).filter((p): p is string => p !== null);
 
-    const ema21Points = visibleCandles.map((_, i) => {
-      const v = ema21All[sliceStart + i];
+    const ema200Points = visibleCandles.map((_, i) => {
+      const v = ema200All[sliceStart + i];
       return Number.isFinite(v) ? `${candleX(i)},${scaleY(v)}` : null;
     }).filter((p): p is string => p !== null);
 
@@ -538,7 +538,7 @@ export function CandlestickChart({ candles, signals, viewKey = "default" }: Prop
       priceLevels, chartAreaW, chartH,
       slotCount, plotWidth, candleW, bodyW, visualShift,
       candleX, scaleY, scaleRsiY, scaleMacdY,
-      ema9Points, ema21Points, rsiPoints,
+      ema50Points, ema200Points, rsiPoints,
       macdPoints, macdSigPoints, visibleHist,
       mainTop, mainH, subTop,
       volTop, volH, macdTop, macdH, macdMid,
@@ -555,7 +555,7 @@ export function CandlestickChart({ candles, signals, viewKey = "default" }: Prop
     visibleCandles, scaleMax, scaleMin, scaleRange, lastPrice, lastBullish, lastRsi,
     priceLevels, chartAreaW, chartH, slotCount, plotWidth, candleW, bodyW, visualShift,
     candleX, scaleY, scaleRsiY, scaleMacdY,
-    ema9Points, ema21Points, rsiPoints, macdPoints, macdSigPoints, visibleHist,
+    ema50Points, ema200Points, rsiPoints, macdPoints, macdSigPoints, visibleHist,
     mainTop, mainH, subTop, volTop, volH, macdTop, macdH, macdMid, rsiTop, rsiH,
     maxVol, volSeries, placedSignals, activeSignals, timeTicks, visibleRangeMs,
   } = chartData;
@@ -642,11 +642,11 @@ export function CandlestickChart({ candles, signals, viewKey = "default" }: Prop
                   </g>
                 );
               })}
-              {ema9Points.length  > 1 && (
-                <polyline points={ema9Points.join(" ")}  fill="none" stroke="#fbbf24" strokeWidth="0.2" opacity="0.75" />
+              {ema50Points.length  > 1 && (
+                <polyline points={ema50Points.join(" ")}  fill="none" stroke="#fbbf24" strokeWidth="0.2" opacity="0.75" />
               )}
-              {ema21Points.length > 1 && (
-                <polyline points={ema21Points.join(" ")} fill="none" stroke="#38bdf8" strokeWidth="0.2" opacity="0.75" />
+              {ema200Points.length > 1 && (
+                <polyline points={ema200Points.join(" ")} fill="none" stroke="#38bdf8" strokeWidth="0.2" opacity="0.75" />
               )}
               {activeSignals.map((s, idx) => (
                 <g key={`lines-${idx}`}>
@@ -723,8 +723,8 @@ export function CandlestickChart({ candles, signals, viewKey = "default" }: Prop
             {/* Legend */}
             <div className="absolute left-2 top-1.5 pointer-events-none select-none">
               <div className="flex items-center gap-1.5 px-2 py-0.5 rounded bg-[#04050a]/90 border border-white/10">
-                <span className="text-[8px] font-mono font-bold text-amber-400 whitespace-nowrap">EMA9</span>
-                <span className="text-[8px] font-mono font-bold text-sky-400 whitespace-nowrap">EMA21</span>
+                <span className="text-[8px] font-mono font-bold text-amber-400 whitespace-nowrap">EMA {INDICATOR_CONFIG.EMA_SHORT}</span>
+                <span className="text-[8px] font-mono font-bold text-sky-400 whitespace-nowrap">EMA {INDICATOR_CONFIG.EMA_LONG}</span>
                 <span className="text-white/20 text-[8px]">|</span>
                 <span className="text-[8px] font-mono font-bold text-green-400 whitespace-nowrap">▲ BUY</span>
                 <span className="text-white/20 text-[8px]">|</span>

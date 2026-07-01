@@ -480,13 +480,13 @@ export const TRADING_CONFIG = {
   MIN_CANDLES: 30,           // Minimum candles untuk deteksi sinyal
   MAX_SIGNALS_HISTORY: 20,   // Maximum signals dalam history
   CANDLE_DISPLAY_COUNT: 80,  // Jumlah candles di chart
-  MAX_CANDLES_BUFFER: 100,   // Maximum candles buffer untuk kalkulasi
+  MAX_CANDLES_BUFFER: 300,   // Minimum ~EMA_LONG+margin untuk EMA 200 akurat
 } as const;
 
 // ─── Indicator Parameters ─────────────────────────────────────────────────────
 export const INDICATOR_CONFIG = {
-  EMA_SHORT: 9,
-  EMA_LONG: 21,
+  EMA_SHORT: 50,
+  EMA_LONG: 200,
   RSI_PERIOD: 14,
   MACD_FAST: 12,
   MACD_SLOW: 26,

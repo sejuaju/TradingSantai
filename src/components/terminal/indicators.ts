@@ -119,9 +119,10 @@ export const MAX_SCORE = 12.5;
 
 export function calcScores(candles: Candle[], htfTrend: "bullish"|"bearish"|"neutral"): ScoreBreakdown {
   const empty: ScoreBreakdown = { buyScore:0, sellScore:0, items:[], bias:"NEUTRAL", strength:"WEAK" };
-  if (candles.length < 30) return empty;
+  if (candles.length < INDICATOR_CONFIG.EMA_LONG) return empty;
   const closes = candles.map(c => c.close);
-  const ema9 = calcEMA(closes, 9), ema21 = calcEMA(closes, 21);
+  const ema50 = calcEMA(closes, INDICATOR_CONFIG.EMA_SHORT);
+  const ema200 = calcEMA(closes, INDICATOR_CONFIG.EMA_LONG);
   const rsi  = calcRSI(closes);
   const { histogram } = calcMACD(closes);
   const len = closes.length, i = len - 1, prev = len - 2;
@@ -144,12 +145,12 @@ export function calcScores(candles: Candle[], htfTrend: "bullish"|"bearish"|"neu
   };
   let bc = 0, sc = 0;
   for (let j = Math.max(2, i - 4); j <= i; j++) {
-    if (ema9[j-1] <= ema21[j-1] && ema9[j] > ema21[j]) bc = 2;
-    if (ema9[j-1] >= ema21[j-1] && ema9[j] < ema21[j]) sc = 2;
+    if (ema50[j-1] <= ema200[j-1] && ema50[j] > ema200[j]) bc = 2;
+    if (ema50[j-1] >= ema200[j-1] && ema50[j] < ema200[j]) sc = 2;
   }
   add("EMA Cross", bc, sc, 2);
-  add("EMA Trend", ema9[i]>ema21[i]?1:0, ema9[i]<ema21[i]?1:0, 1);
-  add("Price/EMA", (closes[i]>ema9[i]&&closes[i]>ema21[i])?1:0, (closes[i]<ema9[i]&&closes[i]<ema21[i])?1:0, 1);
+  add("EMA Trend", ema50[i]>ema200[i]?1:0, ema50[i]<ema200[i]?1:0, 1);
+  add("Price/EMA", (closes[i]>ema50[i]&&closes[i]>ema200[i])?1:0, (closes[i]<ema50[i]&&closes[i]<ema200[i])?1:0, 1);
   add("MACD",
     macdBull?1:(!macdBull&&histogram[i]>histogram[prev]?0.5:0),
     macdBear?1:(!macdBear&&histogram[i]<histogram[prev]?0.5:0), 1);
@@ -191,12 +192,12 @@ export function detectSignals(
   recentSignals: Signal[] = []
 ): Signal | null {
 
-  if (candles.length < 30) return null;
+  if (candles.length < INDICATOR_CONFIG.EMA_LONG) return null;
   if (activeSignals.length > 0) return null;
 
   const closes = candles.map(c => c.close);
-  const ema9   = calcEMA(closes, 9);
-  const ema21  = calcEMA(closes, 21);
+  const ema50   = calcEMA(closes, INDICATOR_CONFIG.EMA_SHORT);
+  const ema200  = calcEMA(closes, INDICATOR_CONFIG.EMA_LONG);
   const rsi    = calcRSI(closes);
   const { histogram } = calcMACD(closes);
 
@@ -260,19 +261,19 @@ export function detectSignals(
   // 1. EMA Cross (5 candles terakhir)
   let bullCross = false, bearCross = false;
   for (let j = Math.max(2, i - 4); j <= i; j++) {
-    if (ema9[j-1] <= ema21[j-1] && ema9[j] > ema21[j]) bullCross = true;
-    if (ema9[j-1] >= ema21[j-1] && ema9[j] < ema21[j]) bearCross = true;
+    if (ema50[j-1] <= ema200[j-1] && ema50[j] > ema200[j]) bullCross = true;
+    if (ema50[j-1] >= ema200[j-1] && ema50[j] < ema200[j]) bearCross = true;
   }
   if (bullCross) { buyScore  += 2; reasons.push("EMA×↑"); }
   if (bearCross) { sellScore += 2; reasons.push("EMA×↓"); }
 
   // 2. EMA Trend
-  if (ema9[i] > ema21[i]) buyScore  += 1;
-  if (ema9[i] < ema21[i]) sellScore += 1;
+  if (ema50[i] > ema200[i]) buyScore  += 1;
+  if (ema50[i] < ema200[i]) sellScore += 1;
 
   // 3. Price vs EMA
-  if (closes[i] > ema9[i] && closes[i] > ema21[i]) { buyScore  += 1; reasons.push("P>EMA"); }
-  if (closes[i] < ema9[i] && closes[i] < ema21[i]) { sellScore += 1; reasons.push("P<EMA"); }
+  if (closes[i] > ema50[i] && closes[i] > ema200[i]) { buyScore  += 1; reasons.push("P>EMA"); }
+  if (closes[i] < ema50[i] && closes[i] < ema200[i]) { sellScore += 1; reasons.push("P<EMA"); }
 
   // 4. MACD
   if (macdBull)  { buyScore  += 1;   reasons.push("MACD↑"); }

@@ -85,18 +85,18 @@ export default function BacktestTerminal({
   const priceChange =
     firstPrice > 0 ? ((lastPrice - firstPrice) / firstPrice) * 100 : 0;
 
-  const { ema9, ema21, rsi } = useMemo(() => {
+  const { ema50, ema200, rsi } = useMemo(() => {
     if (candles.length < 2) {
-      return { ema9: 0, ema21: 0, rsi: 50 };
+      return { ema50: 0, ema200: 0, rsi: 50 };
     }
     const closes = candles.map((c) => c.close);
-    const ema9Arr = calcEMA(closes, 9);
-    const ema21Arr = calcEMA(closes, 21);
+    const ema50Arr = calcEMA(closes, 9);
+    const ema200Arr = calcEMA(closes, 21);
     const rsiArr = calcRSI(closes);
     const last = closes.length - 1;
     return {
-      ema9: ema9Arr[last] ?? closes[last],
-      ema21: ema21Arr[last] ?? closes[last],
+      ema50: ema50Arr[last] ?? closes[last],
+      ema200: ema200Arr[last] ?? closes[last],
       rsi: rsiArr[last] ?? 50,
     };
   }, [candles]);
@@ -320,7 +320,7 @@ export default function BacktestTerminal({
               </div>
 
               <div style={{ display: "flex", gap: 6 }}>
-                <IndicatorPill label="EMA" bull={ema9 > ema21} />
+                <IndicatorPill label="EMA" bull={ema50 > ema200} />
                 <IndicatorPill
                   label={`RSI ${rsi.toFixed(0)}`}
                   bull={rsi < 70 && rsi > 30}
