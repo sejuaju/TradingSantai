@@ -73,6 +73,7 @@ async function getRedis(): Promise<RedisClient | null> {
       return {
         get: (key) => kv.get<string>(key),
         set: (key, value) => kv.set(key, value),
+        del: (key) => kv.del(key),
       };
     } catch (err) {
       console.warn("[TokenStore] Vercel KV init failed:", err);
@@ -90,6 +91,16 @@ async function redisGet(): Promise<string | null> {
   } catch (err) {
     console.warn("[TokenStore] Redis read failed:", err);
     return null;
+  }
+}
+
+async function redisDel(): Promise<void> {
+  const redis = await getRedis();
+  if (!redis?.del) return;
+  try {
+    await redis.del(TOKEN_KEY);
+  } catch (err) {
+    console.warn("[TokenStore] Redis delete failed:", err);
   }
 }
 
@@ -159,6 +170,17 @@ export async function getDemoRefreshToken(): Promise<string | null> {
   }
 
   return null;
+}
+
+/** Hapus token stale di Redis/memory — dipakai saat Saxo menolak refresh */
+export async function clearDemoRefreshToken(): Promise<void> {
+  memoryCache = null;
+  await redisDel();
+}
+
+/** Token seed dari env var (untuk recovery) */
+export function getEnvDemoRefreshToken(): string | null {
+  return envSeedToken();
 }
 
 export async function setDemoRefreshToken(token: string): Promise<void> {

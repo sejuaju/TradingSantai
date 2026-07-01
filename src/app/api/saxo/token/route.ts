@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { setDemoRefreshToken, getDemoRefreshToken } from "@/lib/saxo-token-store";
+import { setDemoRefreshToken } from "@/lib/saxo-token-store";
 
 // Server-side token exchange (secure, no CORS issues)
 export async function POST(request: NextRequest) {
@@ -58,14 +58,11 @@ export async function POST(request: NextRequest) {
 
     const tokens = await response.json();
 
-    // Simpan refresh token demo — pertama kali saja (jangan timpa token aktif di KV).
+    // Login pemilik app = perbarui demo token di Redis/file (recovery otomatis)
     if (tokens.refresh_token) {
       try {
-        const existing = await getDemoRefreshToken();
-        if (!existing) {
-          await setDemoRefreshToken(tokens.refresh_token);
-          console.log("[Token] Demo refresh token diinisialisasi dari login OAuth");
-        }
+        await setDemoRefreshToken(tokens.refresh_token);
+        console.log("[Token] Demo refresh token diperbarui dari login OAuth");
       } catch (err) {
         console.warn("[Token] Could not save demo token:", err);
       }

@@ -6,6 +6,8 @@ import { NextResponse } from "next/server";
 import {
   getDemoRefreshToken,
   setDemoRefreshToken,
+  clearDemoRefreshToken,
+  getEnvDemoRefreshToken,
   isDemoRefreshReady,
   acquireDemoRefreshLock,
 } from "@/lib/saxo-token-store";
@@ -24,7 +26,7 @@ async function exchangeRefreshToken(refreshToken: string): Promise<{
   accessToken: string;
   refreshToken?: string;
   expiresIn: number;
-} | null> {
+} | { error: string } | null> {
   const appKey = process.env.NEXT_PUBLIC_SAXO_APP_KEY;
   const appSecret = process.env.SAXO_APP_SECRET;
   if (!appKey || !appSecret) return null;
@@ -42,8 +44,8 @@ async function exchangeRefreshToken(refreshToken: string): Promise<{
 
   if (!res.ok) {
     const body = await res.text();
-    console.error("[GuestToken] Refresh gagal:", res.status, body.substring(0, 200));
-    return null;
+    console.error("[GuestToken] Refresh gagal:", res.status, body.substring(0, 300));
+    return { error: body.substring(0, 300) };
   }
 
   const data = await res.json();
@@ -54,27 +56,58 @@ async function exchangeRefreshToken(refreshToken: string): Promise<{
   };
 }
 
+async function tryRefreshWithToken(refreshToken: string) {
+  const result = await exchangeRefreshToken(refreshToken);
+  if (!result || "error" in result) return { ok: false as const, error: result?.error ?? "unknown" };
+
+  if (result.refreshToken && result.refreshToken !== refreshToken) {
+    await setDemoRefreshToken(result.refreshToken);
+  }
+
+  cachedAccess = {
+    accessToken: result.accessToken,
+    expiresAt: Date.now() + result.expiresIn * 1000,
+  };
+
+  return { ok: true as const, accessToken: result.accessToken };
+}
+
 async function fetchFreshAccessToken(): Promise<{ accessToken: string } | null> {
   const release = await acquireDemoRefreshLock();
   try {
-    // Baca ulang dari Redis — instance lain mungkin sudah rotate token
-    const refreshToken = await getDemoRefreshToken();
+    let refreshToken = await getDemoRefreshToken();
     if (!refreshToken) return null;
 
-    const data = await exchangeRefreshToken(refreshToken);
-    if (!data) return null;
-
-    if (data.refreshToken && data.refreshToken !== refreshToken) {
-      await setDemoRefreshToken(data.refreshToken);
+    let attempt = await tryRefreshWithToken(refreshToken);
+    if (attempt.ok) {
+      console.log("[GuestToken] Access token di-refresh");
+      return { accessToken: attempt.accessToken };
     }
 
-    cachedAccess = {
-      accessToken: data.accessToken,
-      expiresAt: Date.now() + data.expiresIn * 1000,
-    };
+    // Redis mungkin menyimpan token stale — coba seed dari env
+    const envToken = getEnvDemoRefreshToken();
+    if (envToken && envToken !== refreshToken) {
+      console.warn("[GuestToken] Retry dengan SAXO_DEMO_REFRESH_TOKEN dari env...");
+      await clearDemoRefreshToken();
+      await setDemoRefreshToken(envToken);
+      attempt = await tryRefreshWithToken(envToken);
+      if (attempt.ok) {
+        console.log("[GuestToken] Recovery berhasil via env seed");
+        return { accessToken: attempt.accessToken };
+      }
+    }
 
-    console.log(`[GuestToken] Access token di-refresh, valid ~${data.expiresIn}s`);
-    return { accessToken: data.accessToken };
+    // Token di Redis & env sama-sama ditolak Saxo — hapus Redis agar login ulang bisa seed
+    if (envToken) {
+      await clearDemoRefreshToken();
+      attempt = await tryRefreshWithToken(envToken);
+      if (attempt.ok) {
+        return { accessToken: attempt.accessToken };
+      }
+    }
+
+    console.error("[GuestToken] Semua percobaan refresh gagal — perlu refresh_token baru dari login Saxo");
+    return null;
   } finally {
     await release();
   }
@@ -105,7 +138,7 @@ export async function GET() {
     return NextResponse.json(
       {
         error: "Demo token belum dikonfigurasi",
-        hint: "Set SAXO_DEMO_REFRESH_TOKEN + connect Upstash Redis di Vercel, lalu redeploy",
+        hint: "Set SAXO_DEMO_REFRESH_TOKEN + connect Upstash Redis, lalu redeploy",
         configured: false,
       },
       { status: 503 },
@@ -118,7 +151,10 @@ export async function GET() {
       return NextResponse.json(
         {
           error: "Demo token kadaluarsa atau tidak valid",
-          hint: "Login Saxo sekali, copy refresh_token baru ke SAXO_DEMO_REFRESH_TOKEN, redeploy",
+          hint:
+            "1) Login Saxo sekali di situs ini (tombol LOGIN) untuk seed otomatis, ATAU " +
+            "2) Copy refresh_token baru ke SAXO_DEMO_REFRESH_TOKEN lalu restart/redeploy, ATAU " +
+            "3) Hapus key 'saxo:demo:refresh_token' di Upstash lalu redeploy",
         },
         { status: 401 },
       );
