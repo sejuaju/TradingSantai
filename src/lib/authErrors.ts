@@ -19,7 +19,7 @@ export function mapLoginError(
 
   if (isInvalidCredentials) {
     if (emailExists === false) {
-      return "Akun tidak ditemukan. Email ini belum terdaftar — silakan Sign Up.";
+      return "Akun tidak ditemukan. Email ini belum terdaftar. Silakan Sign Up.";
     }
     if (emailExists === true) {
       return "Password salah. Periksa kembali password kamu.";

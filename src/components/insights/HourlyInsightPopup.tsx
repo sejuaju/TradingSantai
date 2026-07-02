@@ -86,7 +86,7 @@ export default function HourlyInsightPopup({ onDismiss }: HourlyInsightPopupProp
                 <span className="text-sm font-semibold text-white/85">Trading Santai</span>
                 <span className="w-px h-3.5 bg-white/15 shrink-0" aria-hidden />
                 <span className="text-[10px] font-medium uppercase tracking-widest text-white/40">
-                  Check-in
+                  Check in
                 </span>
               </div>
             </div>

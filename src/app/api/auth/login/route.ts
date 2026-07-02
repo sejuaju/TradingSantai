@@ -33,7 +33,7 @@ export async function POST(request: Request) {
 
     if (exists === false) {
       return NextResponse.json(
-        { error: "Akun tidak ditemukan. Email ini belum terdaftar — silakan Sign Up." },
+        { error: "Akun tidak ditemukan. Email ini belum terdaftar. Silakan Sign Up." },
         { status: 404 },
       );
     }

@@ -22,7 +22,7 @@ const MODE_COPY = {
     title: "Selamat datang kembali",
     subtitle: "Masuk untuk mengaktifkan Manual Execution dan menyimpan posisi kamu.",
     footer:
-      "Setiap kali kamu login, pesan ini berbeda — pengingat kecil agar trading tetap terukur, bukan sekadar reaksi pada market.",
+      "Setiap kali kamu login, pesan ini berbeda. Pengingat kecil agar trading tetap terukur, bukan sekadar reaksi pada market.",
     gradient:
       "radial-gradient(ellipse 80% 60% at 20% 20%, rgba(99,102,241,0.28), transparent 55%), " +
       "radial-gradient(ellipse 60% 50% at 80% 80%, rgba(34,197,94,0.12), transparent 50%), " +
@@ -30,9 +30,9 @@ const MODE_COPY = {
   },
   signup: {
     title: "Buat akun member",
-    subtitle: "Gratis untuk chart & sinyal — simpan posisi dan profil trading kamu.",
+    subtitle: "Gratis untuk chart & sinyal. Simpan posisi dan profil trading kamu.",
     footer:
-      "Pesan di panel kiri berubah setiap kali kamu membuka form — pengantar singkat sebelum kamu mulai.",
+      "Pesan di panel kiri berubah setiap kali kamu membuka form, pengantar singkat sebelum kamu mulai.",
     gradient:
       "radial-gradient(ellipse 80% 60% at 20% 20%, rgba(34,197,94,0.18), transparent 55%), " +
       "radial-gradient(ellipse 60% 50% at 80% 80%, rgba(99,102,241,0.22), transparent 50%), " +
