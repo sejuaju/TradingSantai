@@ -42,11 +42,9 @@ function AuthCallbackContent() {
         // Clear state
         sessionStorage.removeItem("saxo_oauth_state");
 
-        // Success!
         setStatus("success");
-        
-        // Redirect to home page with EURUSD instrument parameter (auto-select Saxo instrument)
-        console.log("[Auth] Redirecting to EUR/USD chart...");
+
+        console.log("[Auth] Saxo demo token disimpan ke server untuk semua pengunjung");
         setTimeout(() => {
           router.push("/?instrument=EURUSD");
         }, 2000);
@@ -152,7 +150,7 @@ function AuthCallbackContent() {
                 marginBottom: 12,
               }}
             >
-              AUTHENTICATION SUCCESS
+              SETUP BERHASIL
             </h1>
             <p
               style={{
@@ -161,9 +159,10 @@ function AuthCallbackContent() {
                 lineHeight: 1.6,
               }}
             >
-              Your Saxo Bank account has been connected successfully.
+              Token Saxo disimpan di server. Semua pengunjung bisa memakai data market
+              tanpa login Saxo sendiri.
               <br />
-              Redirecting to terminal...
+              Mengalihkan ke chart...
             </p>
           </>
         )}

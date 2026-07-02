@@ -218,9 +218,7 @@ export function useMarketData(instrumentId: string = DEFAULT_INSTRUMENT_ID) {
     const accessToken = await getAccessToken();
     if (!accessToken) {
       throw new Error(
-        "Market data tidak tersedia. " +
-        "Tambahkan SAXO_DEMO_REFRESH_TOKEN di .env.local untuk akses publik, " +
-        "atau login dengan akun Saxo."
+        "Market data tidak tersedia. Admin perlu setup token Saxo sekali di server."
       );
     }
 

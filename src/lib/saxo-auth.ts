@@ -110,11 +110,11 @@ export async function exchangeCodeForTokens(code: string): Promise<SaxoTokens> {
   }
 
   const tokens: SaxoTokens = await response.json();
-  
-  // Store tokens in localStorage (in production, use httpOnly cookies!)
+
+  // Refresh token sudah disimpan ke Redis oleh /api/saxo/token.
+  // Jangan simpan di localStorage — semua user memakai guest token server.
   if (typeof window !== "undefined") {
-    localStorage.setItem("saxo_tokens", JSON.stringify(tokens));
-    localStorage.setItem("saxo_token_timestamp", Date.now().toString());
+    clearTokens();
   }
 
   return tokens;
@@ -139,13 +139,6 @@ export async function refreshAccessToken(refreshToken: string): Promise<SaxoToke
   }
 
   const tokens: SaxoTokens = await response.json();
-  
-  // Update stored tokens
-  if (typeof window !== "undefined") {
-    localStorage.setItem("saxo_tokens", JSON.stringify(tokens));
-    localStorage.setItem("saxo_token_timestamp", Date.now().toString());
-  }
-
   return tokens;
 }
 
@@ -198,25 +191,9 @@ async function refreshAccessTokenLocked(refreshToken: string): Promise<SaxoToken
   return refreshInFlight;
 }
 
-// ─── Get Valid Access Token (auto-refresh if needed) ──────────────────────────
+// ─── Get Valid Access Token ───────────────────────────────────────────────────
 export async function getValidAccessToken(): Promise<string | null> {
-  const tokens = getStoredTokens();
-  if (!tokens) return null;
-
-  // Check if token needs refresh
-  if (isTokenExpired()) {
-    try {
-      const newTokens = await refreshAccessTokenLocked(tokens.refresh_token);
-      return newTokens.access_token;
-    } catch (error) {
-      console.error("Failed to refresh token:", error);
-      // Clear invalid tokens
-      clearTokens();
-      return null;
-    }
-  }
-
-  return tokens.access_token;
+  return getAccessToken();
 }
 
 // ─── Clear Stored Tokens (logout) ─────────────────────────────────────────────
@@ -294,78 +271,62 @@ export async function saxoFetch(
   return response;
 }
 
+const DEMO_CACHE_KEY = "saxo_demo_access_cache";
+
+function readDemoAccessCache(): string | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = sessionStorage.getItem(DEMO_CACHE_KEY);
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as { token: string; expiresAt: number };
+    if (cached.token && Date.now() < cached.expiresAt - 60_000) {
+      return cached.token;
+    }
+  } catch { /* ignore */ }
+  return null;
+}
+
+function writeDemoAccessCache(accessToken: string): void {
+  if (typeof window === "undefined") return;
+  sessionStorage.setItem(
+    DEMO_CACHE_KEY,
+    JSON.stringify({
+      token: accessToken,
+      expiresAt: Date.now() + 1_100_000,
+    }),
+  );
+}
+
+export function clearDemoAccessCache(): void {
+  if (typeof window === "undefined") return;
+  sessionStorage.removeItem(DEMO_CACHE_KEY);
+}
+
 /**
  * getAccessToken
  *
- * Coba ambil access token dengan urutan prioritas:
- *  1. Token user (dari localStorage setelah login personal) — DICEK EXPIRY + AUTO REFRESH
- *  2. Guest/demo token (dari server, pakai credentials pemilik app)
- *
- * Dengan ini pengunjung bisa lihat data market TANPA harus login.
- * Login tetap tersedia untuk fitur personal (akun, order, dll).
- *
- * ✅ FIX (root cause 401 berulang + WS disconnect 1006 berulang):
- * Versi lama langsung return `userTokens.access_token` dari localStorage TANPA
- * cek expired. Access token Saxo SIM hanya hidup ~20 menit — setelah itu semua
- * request (price, accounts, WS auth) ditolak 401/1006 terus-menerus karena token
- * yang SAMA (panjang string sama setiap saat di log) selalu dipakai ulang tanpa
- * pernah di-refresh.
+ * Selalu memakai guest/demo token dari server (Redis).
+ * Admin login Saxo sekali untuk seed refresh token; semua pengunjung
+ * memakai access token yang sama tanpa login Saxo sendiri.
  */
 export async function getAccessToken(): Promise<string | null> {
-  // 1. Coba token user dulu (paling prioritas)
-  const userTokens = getStoredTokens();
-  if (userTokens?.access_token) {
-    if (!isTokenExpired()) {
-      return userTokens.access_token;
-    }
+  if (typeof window === "undefined") return null;
 
-    // Token sudah/akan expired — refresh dulu sebelum dipakai
-    try {
-      console.log("[Saxo] User access token expired, refreshing...");
-      const refreshed = await refreshAccessTokenLocked(userTokens.refresh_token);
-      console.log("[Saxo] ✅ Token refreshed, new length:", refreshed.access_token.length);
-      return refreshed.access_token;
-    } catch (error) {
-      console.error("[Saxo] ❌ Refresh gagal (refresh_token juga kadaluarsa/invalid):", error);
-      clearTokens();
-      // Jangan return null di sini — lanjut ke guest token di bawah supaya
-      // chart tetap tampil (mode guest) walau sesi personal user sudah habis.
-    }
-  }
-
-  // 2. Fallback ke guest/demo token (server-side)
-  if (typeof window === "undefined") return null; // server-side render, skip
-
-  // Cache browser — kurangi hit /api/saxo/guest-token (penting di Vercel serverless)
-  const demoCacheKey = "saxo_demo_access_cache";
-  try {
-    const raw = sessionStorage.getItem(demoCacheKey);
-    if (raw) {
-      const cached = JSON.parse(raw) as { token: string; expiresAt: number };
-      if (cached.token && Date.now() < cached.expiresAt - 60_000) {
-        return cached.token;
-      }
-    }
-  } catch { /* ignore */ }
+  const cached = readDemoAccessCache();
+  if (cached) return cached;
 
   try {
     const res = await fetch("/api/saxo/guest-token");
     if (res.ok) {
       const data = await res.json();
       if (data.accessToken) {
-        sessionStorage.setItem(
-          demoCacheKey,
-          JSON.stringify({
-            token: data.accessToken,
-            expiresAt: Date.now() + 1_100_000, // ~18 menit (access token Saxo ~20 menit)
-          }),
-        );
-        console.log("[Saxo] Using demo/guest token for market data");
+        writeDemoAccessCache(data.accessToken);
         return data.accessToken;
       }
     }
+    clearDemoAccessCache();
   } catch {
-    // Guest token tidak tersedia — tidak apa-apa, return null
+    clearDemoAccessCache();
   }
 
   return null;

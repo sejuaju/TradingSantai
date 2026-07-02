@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { setDemoRefreshToken } from "@/lib/saxo-token-store";
 
 // Server-side token refresh (secure, no CORS issues)
 export async function POST(request: NextRequest) {
@@ -56,7 +57,10 @@ export async function POST(request: NextRequest) {
 
     const tokens = await response.json();
 
-    // Return new tokens to client
+    if (tokens.refresh_token) {
+      await setDemoRefreshToken(tokens.refresh_token);
+    }
+
     return NextResponse.json(tokens);
   } catch (error) {
     console.error("Token refresh error:", error);
