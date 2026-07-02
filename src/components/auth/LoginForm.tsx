@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import { mapLoginError } from "@/lib/authErrors";
 import { validateEmail } from "@/lib/validateEmail";
 import {
   AUTH_ERROR_CLASS,
@@ -48,17 +49,41 @@ export default function LoginForm({ onSuccess, onSwitchToSignup, notice }: Login
       return;
     }
 
+    const normalizedEmail = email.trim().toLowerCase();
+    let emailExists: boolean | null = null;
+
     try {
+      const checkRes = await fetch("/api/auth/check-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: normalizedEmail }),
+      });
+      const checkData = (await checkRes.json()) as {
+        exists?: boolean | null;
+        checked?: boolean;
+      };
+
+      if (checkData.checked && checkData.exists === false) {
+        setError("Akun tidak ditemukan. Email ini belum terdaftar — silakan Sign Up.");
+        return;
+      }
+
+      emailExists = checkData.exists ?? null;
+
       const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: email.trim().toLowerCase(),
+        email: normalizedEmail,
         password,
       });
-      if (signInError) throw signInError;
+      if (signInError) {
+        setError(mapLoginError(signInError.message, emailExists));
+        return;
+      }
+
       onSuccess?.();
       router.push("/");
       router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Terjadi kesalahan. Coba lagi.");
+    } catch {
+      setError("Terjadi kesalahan. Coba lagi.");
     } finally {
       setLoading(false);
     }
