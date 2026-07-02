@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { Lock } from "lucide-react";
+import { useAuth } from "@/contexts/AuthContext";
+import AuthTrigger from "@/components/auth/AuthTrigger";
 import { C, D, T } from "./shared";
 import type { Signal } from "./types";
 
@@ -87,6 +90,8 @@ export function AgentSidebar({
   signals,
   isFullscreen = false,
 }: Props) {
+  const { user, loading: authLoading } = useAuth();
+  const canExecute = !!user;
   const [autoOn,   setAutoOn]   = useState(false);
   const [riskMode, setRiskMode] = useState<"NORMAL"|"SMART"|"OCA">("NORMAL");
   const [riskPct,  setRiskPct]  = useState(90);
@@ -139,30 +144,60 @@ export function AgentSidebar({
       <div style={{ padding:"10px 14px", borderTop:D }}>
         <SideLabel icon="★" text="Manual Execution" />
 
-        <div style={{ ...row(6), marginBottom:10 }}>
+        {!authLoading && !canExecute && (
+          <div style={{
+            marginBottom:10, padding:"10px 12px", borderRadius:6,
+            background:"rgba(99,102,241,0.10)", border:"1px solid rgba(99,102,241,0.25)",
+            ...col(6),
+          }}>
+            <div style={{ ...row(6), alignItems:"center" }}>
+              <Lock size={12} color={C.purple} />
+              <span style={{ fontSize:10, color:T.body, fontWeight:700 }}>
+                Login diperlukan
+              </span>
+            </div>
+            <span style={{ fontSize:9, color:T.dim, lineHeight:1.4 }}>
+              Chart & sinyal tetap terbuka. Login akun Trading Santai untuk BUY/SELL manual.
+            </span>
+            <AuthTrigger
+              mode="login"
+              style={{
+                display:"inline-block", marginTop:2, fontSize:10, fontWeight:700,
+                color:C.cyan, textDecoration:"none", background:"none", border:"none",
+                padding:0, cursor:"pointer", fontFamily:"inherit",
+              }}
+            >
+              Login sekarang →
+            </AuthTrigger>
+          </div>
+        )}
+
+        <div style={{ ...row(6), marginBottom:10, opacity: canExecute ? 1 : 0.45 }}>
           <button 
-            aria-label="Sell BTC at current price"
+            aria-label="Sell at current price"
+            disabled={!canExecute}
             style={{ flex:1, padding:"10px 0", borderRadius:6, border:"none",
               background:"#dc2626", color:"white", fontSize:12, fontWeight:800,
-              letterSpacing:"0.1em", cursor:"pointer",
-              boxShadow:"0 0 14px rgba(220,38,38,0.3)" }}>SELL</button>
+              letterSpacing:"0.1em", cursor: canExecute ? "pointer" : "not-allowed",
+              boxShadow: canExecute ? "0 0 14px rgba(220,38,38,0.3)" : "none" }}>SELL</button>
           <button 
-            aria-label="Buy BTC at current price"
+            aria-label="Buy at current price"
+            disabled={!canExecute}
             style={{ flex:1, padding:"10px 0", borderRadius:6, border:"none",
               background:"#16a34a", color:"white", fontSize:12, fontWeight:800,
-              letterSpacing:"0.1em", cursor:"pointer",
-              boxShadow:"0 0 14px rgba(22,163,74,0.3)" }}>BUY</button>
+              letterSpacing:"0.1em", cursor: canExecute ? "pointer" : "not-allowed",
+              boxShadow: canExecute ? "0 0 14px rgba(22,163,74,0.3)" : "none" }}>BUY</button>
         </div>
 
         <div style={{ ...row(0), justifyContent:"space-between", alignItems:"center",
           background:"rgba(255,255,255,0.05)", borderRadius:6,
           padding:"7px 12px", border:"1px solid rgba(255,255,255,0.10)",
-          marginBottom:10 }}>
+          marginBottom:10, opacity: canExecute ? 1 : 0.45 }}>
           <span style={{ fontSize:10, color:T.dim }}>TIPPLE</span>
           <span style={{ fontSize:13, fontWeight:700, color:T.main }}>0.001</span>
         </div>
 
-        <div style={{ ...row(8) }}>
+        <div style={{ ...row(8), opacity: canExecute ? 1 : 0.45 }}>
           {[
             { label:"GAMES", accent:C.red,   val:35 },
             { label:"GAINS", accent:C.green, val:65 },
@@ -170,6 +205,7 @@ export function AgentSidebar({
             <div key={s.label} style={{ ...col(5), flex:1, alignItems:"center" }}>
               <span style={{ fontSize:10, color:T.dim }}>{s.label}</span>
               <input type="range" min={0} max={100} defaultValue={s.val}
+                disabled={!canExecute}
                 style={{ width:"100%", accentColor:s.accent }}/>
             </div>
           ))}

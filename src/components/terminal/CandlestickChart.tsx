@@ -4,6 +4,7 @@ import { useMemo, useState, useRef, useCallback, useEffect, Fragment } from "rea
 import { Candle, Signal } from "./types";
 import { TRADING_CONFIG, CHART_CONFIG, INDICATOR_CONFIG } from "./config";
 import { calcEMA, calcRSI, calcMACD } from "./indicators";
+import { CHART_LINES } from "./shared";
 
 interface Props {
   candles: Candle[];
@@ -580,7 +581,7 @@ export function CandlestickChart({ candles, signals, viewKey = "default" }: Prop
   const rsiVolDivPct      = ((volTop  - subTop) / subViewH) * 100;
   const badgeTopPct       = clamp(((scaleMax - lastPrice) / scaleRange) * 100, 5, 93);
   const livePriceY        = scaleY(lastPrice);
-  const liveLineColor     = lastBullish ? "#22c55e" : "#ef4444";
+  const liveLineColor     = lastBullish ? CHART_LINES.bullish : CHART_LINES.bearish;
 
   const handleHoverMove = (e: React.MouseEvent) => {
     if (dragMode || !plotRef.current) return;
@@ -628,7 +629,7 @@ export function CandlestickChart({ candles, signals, viewKey = "default" }: Prop
               ))}
               {visibleCandles.map((c, i) => {
                 const bullish    = c.close >= c.open;
-                const color      = bullish ? "#22c55e" : "#ef4444";
+                const color      = bullish ? CHART_LINES.bullish : CHART_LINES.bearish;
                 const x          = candleX(i);
                 const bodyTop    = scaleY(Math.max(c.open, c.close));
                 const bodyBot    = scaleY(Math.min(c.open, c.close));
@@ -650,14 +651,14 @@ export function CandlestickChart({ candles, signals, viewKey = "default" }: Prop
               )}
               {activeSignals.map((s, idx) => (
                 <g key={`lines-${idx}`}>
-                  {inRange(s.price) && <SignalLineSvg y={scaleY(s.price)} color="#e2e8f0" chartAreaW={chartAreaW} />}
-                  {inRange(s.sl)    && <SignalLineSvg y={scaleY(s.sl)}    color="#ef4444" chartAreaW={chartAreaW} />}
-                  {inRange(s.tp)    && <SignalLineSvg y={scaleY(s.tp)}    color="#22c55e" chartAreaW={chartAreaW} />}
+                  {inRange(s.price) && <SignalLineSvg y={scaleY(s.price)} color={CHART_LINES.entry} chartAreaW={chartAreaW} />}
+                  {inRange(s.sl)    && <SignalLineSvg y={scaleY(s.sl)}    color={CHART_LINES.sl}    chartAreaW={chartAreaW} />}
+                  {inRange(s.tp)    && <SignalLineSvg y={scaleY(s.tp)}    color={CHART_LINES.tp}    chartAreaW={chartAreaW} />}
                 </g>
               ))}
               {placedSignals.map(({ signal, x, entryY }, idx) => {
                 const dotOp = signalMarkerOpacity(signal.status);
-                const color = signal.type === "BUY" ? "#22c55e" : "#ef4444";
+                const color = signal.type === "BUY" ? CHART_LINES.bullish : CHART_LINES.bearish;
                 return (
                   <g key={`dot-${idx}`} opacity={dotOp}>
                     <line x1={x} y1={entryY} x2={x + candleW * 0.28} y2={entryY}
@@ -675,7 +676,7 @@ export function CandlestickChart({ candles, signals, viewKey = "default" }: Prop
               <Fragment key={`labels-${idx}`}>
                 {inRange(s.price) && <HtmlLineLabel yPct={toMainYPct(scaleY(s.price))} label="ENTRY" bgClass="bg-slate-400" />}
                 {inRange(s.sl)    && <HtmlLineLabel yPct={toMainYPct(scaleY(s.sl))}    label="SL"    bgClass="bg-red-500"   />}
-                {inRange(s.tp)    && <HtmlLineLabel yPct={toMainYPct(scaleY(s.tp))}    label="TP"    bgClass="bg-green-500" />}
+                {inRange(s.tp)    && <HtmlLineLabel yPct={toMainYPct(scaleY(s.tp))}    label="TP"    bgClass="bg-cyan-500" />}
               </Fragment>
             ))}
             {placedSignals.map(({ signal, x, wickY }, idx) => (

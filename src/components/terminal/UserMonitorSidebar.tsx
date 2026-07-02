@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import { C, D, T } from "./shared";
+import { C, CHART_LINES, D, T } from "./shared";
 import type { Signal } from "./types";
 import type { Instrument } from "./config";
 import { PIP_SIZE_BY_CATEGORY, TRADING_CONFIG } from "./config";
+import { ProfileMonitorHeader } from "./ProfileMonitorHeader";
 
 const MX  = "monospace";
 const col = (gap = 0): React.CSSProperties => ({ display: "flex", flexDirection: "column", gap });
@@ -16,6 +17,7 @@ const LOT_UNIT = TRADING_CONFIG.LOT_UNIT;
 
 interface Props {
   signals      : Signal[];
+  userSignals ?: Signal[];
   currentPrice : number;
   formatPrice  : (p: number) => string;
   instrument   : Instrument;
@@ -218,9 +220,17 @@ function PositionRow({ s, currentPrice, formatPrice, leverage, symbolLabel, pipS
           borderRadius:5, border:`1px solid ${accent}44`, letterSpacing:"0.1em" }}>
           {s.type}
         </span>
-        <span style={{ fontSize:12, fontWeight:700, color:T.sub, fontFamily:MX }}>
-          {symbolLabel}
-        </span>
+        <div style={{ ...col(2), gap: 2 }}>
+          <span style={{ fontSize:12, fontWeight:700, color:T.sub, fontFamily:MX }}>
+            {symbolLabel}
+          </span>
+          {s.entryTimeframe && (
+            <span style={{ fontSize:9, fontWeight:700, fontFamily:MX, color:C.cyan,
+              letterSpacing:"0.08em" }}>
+              Entry: {s.entryTimeframe}
+            </span>
+          )}
+        </div>
         <div style={{ marginLeft:"auto", ...col(2), alignItems:"flex-end" }}>
           <span style={{ fontSize:15, fontWeight:800, fontFamily:MX,
             color:pnlColor, textShadow:`0 0 10px ${pnlColor}55` }}>
@@ -265,7 +275,7 @@ function PositionRow({ s, currentPrice, formatPrice, leverage, symbolLabel, pipS
           <span style={{ fontFamily:MX, fontSize:10, fontWeight:700, color:pnlColor }}>
             {prog.toFixed(0)}% to TP
           </span>
-          <span style={{ fontFamily:MX, fontSize:10, color:C.green }}>TP</span>
+          <span style={{ fontFamily:MX, fontSize:10, color:CHART_LINES.tp }}>TP</span>
         </div>
       </div>
 
@@ -273,7 +283,7 @@ function PositionRow({ s, currentPrice, formatPrice, leverage, symbolLabel, pipS
       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr 1fr", gap:5 }}>
         {[
           { l:"ENTRY", v:formatPrice(s.price), c:T.body  },
-          { l:"TP",    v:formatPrice(s.tp),    c:C.green },
+          { l:"TP",    v:formatPrice(s.tp),    c:CHART_LINES.tp },
           { l:"SL",    v:formatPrice(s.sl),    c:C.red   },
         ].map(({ l,v,c }) => (
           <div key={l} style={{ ...col(3), alignItems:"center", padding:"6px 4px",
@@ -291,28 +301,32 @@ function PositionRow({ s, currentPrice, formatPrice, leverage, symbolLabel, pipS
 
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export function UserMonitorSidebar({
-  signals, currentPrice, formatPrice, instrument, isFullscreen = false,
+  signals,
+  userSignals,
+  currentPrice,
+  formatPrice,
+  instrument,
+  isFullscreen = false,
 }: Props) {
   const [cubityOn, setCubityOn] = useState(true);
   const [leverage, setLeverage] = useState(10);
 
   const symbolLabel = instrument.description || instrument.symbol;
   const pipSize     = PIP_SIZE_BY_CATEGORY[instrument.category] ?? 0.01;
+  const accountSignals = userSignals ?? signals;
 
   const {
     equity, balance, marginUsed, freeMargin,
     realizedPnl, returnPct, marginLvl,
-  } = useAccountMetrics(signals, currentPrice, leverage, pipSize);
+  } = useAccountMetrics(accountSignals, currentPrice, leverage, pipSize);
 
   const active  = signals.filter(s => s.status === "active");
-  const win     = signals.filter(s => s.status === "win").length;
-  const loss    = signals.filter(s => s.status === "loss").length;
+  const win     = accountSignals.filter(s => s.status === "win").length;
+  const loss    = accountSignals.filter(s => s.status === "loss").length;
   const closed  = win + loss;
   const wr      = closed > 0 ? ((win / closed) * 100).toFixed(1) : "0.0";
 
-  const retColor = returnPct >= 0 ? C.green : C.red;
-  const retSign  = returnPct >= 0 ? "+" : "";
-  const fmt      = (v: number) => "$" + Math.abs(v).toFixed(2);
+  const fmt = (v: number) => "$" + Math.abs(v).toFixed(2);
 
   return (
     <div className="no-scrollbar" style={{
@@ -326,17 +340,7 @@ export function UserMonitorSidebar({
       <div style={{ padding:"14px 14px 12px" }}>
         <SideLabel icon="●" text="Master User Monitor" color={C.orange} />
 
-        {/* User ID + Return % */}
-        <div style={{ ...row(0), justifyContent:"space-between", marginBottom:12 }}>
-          <span style={{ fontSize:12, fontWeight:800, color:C.cyan,
-            fontFamily:MX, letterSpacing:"0.04em" }}>
-            Ras_C109177580
-          </span>
-          <span style={{ fontSize:14, fontWeight:800, fontFamily:MX,
-            color:retColor, textShadow:`0 0 10px ${retColor}55` }}>
-            {retSign}{Math.abs(returnPct).toFixed(1)}%
-          </span>
-        </div>
+        <ProfileMonitorHeader returnPct={returnPct} />
 
         {/* Account values card */}
         <div style={{ background:"rgba(255,255,255,0.04)",
@@ -443,8 +447,8 @@ export function UserMonitorSidebar({
             </span>
           </div>
         ) : (
-          active.map((s, i) => (
-            <PositionRow key={i} s={s}
+          active.map((s) => (
+            <PositionRow key={`${s.time}-${s.type}-${s.instrumentId ?? "x"}`} s={s}
               currentPrice={currentPrice}
               formatPrice={formatPrice}
               leverage={leverage}
@@ -462,7 +466,7 @@ export function UserMonitorSidebar({
             <Stat label="WIN RATE" value={`${wr}%`}                 color={C.green} />
             <Stat label="WIN"      value={win.toString()}            color={C.green} />
             <Stat label="LOSS"     value={loss.toString()}           color={C.red}   />
-            <Stat label="TOTAL"    value={signals.length.toString()} color={T.sub}   />
+            <Stat label="TOTAL"    value={accountSignals.length.toString()} color={T.sub}   />
           </div>
         )}
       </div>

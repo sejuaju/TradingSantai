@@ -1,4 +1,5 @@
 import { MessageCircle } from "lucide-react";
+import SignupButton from "@/components/auth/SignupButton";
 
 export default function Services() {
   return (
@@ -85,13 +86,10 @@ export default function Services() {
               <div className="flex flex-col sm:flex-row">
                 <div className="p-6 flex-1">
                   <h3 className="text-xl font-bold text-white mb-4">Premium Community Membership</h3>
-                  <a
-                    href="#signup"
-                    className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-accent hover:bg-accent-dark rounded-full transition-all"
-                  >
+                  <SignupButton className="inline-flex items-center gap-2 px-5 py-2.5 text-sm font-medium text-white bg-accent hover:bg-accent-dark rounded-full transition-all cursor-pointer">
                     <MessageCircle className="w-4 h-4" />
                     Sign Up Now
-                  </a>
+                  </SignupButton>
                 </div>
                 {/* Discord-like preview */}
                 <div className="w-full sm:w-64 bg-[#0e0e1a] p-3">

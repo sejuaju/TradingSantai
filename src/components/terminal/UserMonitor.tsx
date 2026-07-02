@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { C, D } from "./shared";
+import { C, CHART_LINES, D } from "./shared";
 import type { Signal } from "./types";
 
 const row = (gap = 0): React.CSSProperties => ({ display: "flex", alignItems: "center", gap });
@@ -74,7 +74,7 @@ function PosRow({ s, formatPrice }: { s: Signal; formatPrice: (p: number) => str
             SL <span style={{ color: C.red }}>{formatPrice(s.sl)}</span>
           </span>
           <span style={{ fontFamily: MX, fontSize: 7.5, color: T.dim }}>
-            TP <span style={{ color: C.green }}>{formatPrice(s.tp)}</span>
+            TP <span style={{ color: CHART_LINES.tp }}>{formatPrice(s.tp)}</span>
           </span>
         </div>
       </div>

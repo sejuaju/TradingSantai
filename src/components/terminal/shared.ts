@@ -11,6 +11,15 @@ export const C = {
   teal:   "#14b8a6",
 } as const;
 
+/** Chart overlay lines — TP uses cyan so it doesn't clash with bullish candle green */
+export const CHART_LINES = {
+  entry:   "#e2e8f0",
+  sl:      C.red,
+  tp:      C.cyan,
+  bullish: C.green,
+  bearish: C.red,
+} as const;
+
 // ─── Global text colour scale (all legible on #060810 bg) ────────────────────
 // T.mute  → decorative / placeholder  (was 0.25–0.35 — too dark)
 // T.dim   → secondary labels          (was 0.38–0.45 — too dark)

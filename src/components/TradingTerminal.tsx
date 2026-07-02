@@ -260,11 +260,11 @@ export default function TradingTerminal() {
     router.replace(`/?instrument=${newInstrument.id}`, { scroll: false });
   };
   const {
-    signals, rsiValue,
-    ema50Value, ema200Value,
+    signals, userSignals, rsiValue,
+    ema9Value, ema21Value,
     macdValue, macdSignalValue,
     scoreBreakdown,
-  } = useSignals(candles, htfTrend, instrumentId);
+  } = useSignals(candles, htfTrend, instrumentId, selectedTf);
   const macdBull = macdValue > macdSignalValue;
 
   const formatPrice = (p:number) =>
@@ -468,7 +468,7 @@ export default function TradingTerminal() {
               </div>
 
               <div style={{ display:"flex", gap:6 }}>
-                <Pill label="EMA"  bull={ema50Value>ema200Value} icon={ema50Value>ema200Value?"▲":"▼"}/>
+                <Pill label="EMA"  bull={ema9Value>ema21Value} icon={ema9Value>ema21Value?"▲":"▼"}/>
                 <Pill label={`MACD ${macdBull?"↑":"↓"}`} bull={macdBull}/>
                 <RsiPill rsi={rsiValue}/>
               </div>
@@ -533,6 +533,7 @@ export default function TradingTerminal() {
 
         <UserMonitorSidebar
           signals={signals}
+          userSignals={userSignals}
           currentPrice={currentPrice}
           formatPrice={formatPrice}
           instrument={instrument}

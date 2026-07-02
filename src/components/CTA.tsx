@@ -1,4 +1,5 @@
 import { MessageCircle } from "lucide-react";
+import SignupButton from "@/components/auth/SignupButton";
 
 export default function CTA() {
   return (
@@ -14,13 +15,10 @@ export default function CTA() {
               <p className="text-base text-black/70 mb-8">
                 Join Trading Santai Hub and experience it for yourself
               </p>
-              <a
-                href="#signup"
-                className="inline-flex items-center gap-2 px-6 py-3 text-sm font-semibold text-white bg-[#1a1a2e] hover:bg-[#252540] rounded-full transition-all"
-              >
+              <SignupButton className="inline-flex items-center gap-2 px-6 py-3 text-sm font-semibold text-white bg-[#1a1a2e] hover:bg-[#252540] rounded-full transition-all cursor-pointer">
                 <MessageCircle className="w-4 h-4" />
                 Sign Up Now
-              </a>
+              </SignupButton>
             </div>
 
             {/* Right - Discord mockup */}

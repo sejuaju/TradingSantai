@@ -51,8 +51,9 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
  */
 import { Signal } from "./types";
 
-export function usePersistedSignals() {
-  const [signals, setSignals] = useLocalStorage<Signal[]>("tradingsantai_signals", []);
+export function usePersistedSignals(userId?: string | null) {
+  const key = userId ? `tradingsantai_signals_${userId}` : "tradingsantai_signals_guest";
+  const [signals, setSignals] = useLocalStorage<Signal[]>(key, []);
   
   // Clear old signals (older than 7 days)
   useEffect(() => {

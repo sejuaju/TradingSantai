@@ -2,6 +2,7 @@
 
 import { Suspense } from "react";
 import { MessageCircle } from "lucide-react";
+import AuthTrigger from "@/components/auth/AuthTrigger";
 import TradingTerminal from "./TradingTerminal";
 
 export default function Hero() {
@@ -47,13 +48,13 @@ export default function Hero() {
             >
               Learn More
             </a>
-            <a
-              href="#signup"
-              className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-semibold text-white bg-accent hover:bg-accent-dark rounded-full transition-all shadow-lg shadow-accent/25"
+            <AuthTrigger
+              mode="signup"
+              className="inline-flex items-center gap-2 px-6 py-2.5 text-sm font-semibold text-white bg-accent hover:bg-accent-dark rounded-full transition-all shadow-lg shadow-accent/25 cursor-pointer"
             >
               <MessageCircle className="w-4 h-4" />
               Sign Up Now
-            </a>
+            </AuthTrigger>
           </div>
         </div>
 

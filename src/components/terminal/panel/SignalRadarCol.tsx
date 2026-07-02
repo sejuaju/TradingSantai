@@ -1,6 +1,6 @@
 "use client";
 
-import { C, D } from "../shared";
+import { C, CHART_LINES, D } from "../shared";
 import type { Signal } from "../types";
 
 const row = (gap=0): React.CSSProperties => ({ display:"flex", alignItems:"center", gap });
@@ -105,7 +105,7 @@ export function SignalRadarCol({ signals, formatPrice }: Props) {
             {[
               { label:"ENTRY", val:formatPrice(last.price), color:T.main   },
               { label:"SL",    val:formatPrice(last.sl),    color:C.red    },
-              { label:"TP",    val:formatPrice(last.tp),    color:C.green  },
+              { label:"TP",    val:formatPrice(last.tp),    color:CHART_LINES.tp },
               { label:"RSI",   val:last.rsi.toFixed(0),     color:C.purple },
             ].map(({ label, val, color }) => (
               <div key={label} style={{ ...col(3) }}>
