@@ -1,13 +1,23 @@
+export interface AuthErrorLike {
+  message?: string;
+  code?: string;
+  status?: number;
+}
+
 export function mapLoginError(
-  message: string,
+  error: AuthErrorLike,
   emailExists: boolean | null,
 ): string {
-  const lower = message.toLowerCase();
+  const code = (error.code ?? "").toLowerCase();
+  const message = (error.message ?? "").toLowerCase();
 
-  if (
-    lower.includes("invalid login credentials") ||
-    lower.includes("invalid credentials")
-  ) {
+  const isInvalidCredentials =
+    code === "invalid_credentials" ||
+    code === "invalid_grant" ||
+    message.includes("invalid login credentials") ||
+    message.includes("invalid credentials");
+
+  if (isInvalidCredentials) {
     if (emailExists === false) {
       return "Akun tidak ditemukan. Email ini belum terdaftar — silakan Sign Up.";
     }
@@ -17,13 +27,13 @@ export function mapLoginError(
     return "Email atau password tidak sesuai. Jika belum punya akun, silakan Sign Up.";
   }
 
-  if (lower.includes("email not confirmed")) {
+  if (message.includes("email not confirmed") || code === "email_not_confirmed") {
     return "Email belum dikonfirmasi. Cek inbox kamu untuk link verifikasi.";
   }
 
-  if (lower.includes("too many requests")) {
+  if (message.includes("too many requests") || code === "over_request_rate_limit") {
     return "Terlalu banyak percobaan login. Tunggu beberapa menit lalu coba lagi.";
   }
 
-  return message;
+  return "Gagal login. Periksa email dan password kamu, lalu coba lagi.";
 }

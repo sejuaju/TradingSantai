@@ -3,7 +3,6 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
-import { mapLoginError } from "@/lib/authErrors";
 import { validateEmail } from "@/lib/validateEmail";
 import {
   AUTH_ERROR_CLASS,
@@ -50,32 +49,37 @@ export default function LoginForm({ onSuccess, onSwitchToSignup, notice }: Login
     }
 
     const normalizedEmail = email.trim().toLowerCase();
-    let emailExists: boolean | null = null;
 
     try {
-      const checkRes = await fetch("/api/auth/check-email", {
+      const loginRes = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: normalizedEmail }),
+        body: JSON.stringify({ email: normalizedEmail, password }),
       });
-      const checkData = (await checkRes.json()) as {
-        exists?: boolean | null;
-        checked?: boolean;
+
+      const loginData = (await loginRes.json()) as {
+        error?: string;
+        access_token?: string;
+        refresh_token?: string;
       };
 
-      if (checkData.checked && checkData.exists === false) {
-        setError("Akun tidak ditemukan. Email ini belum terdaftar — silakan Sign Up.");
+      if (!loginRes.ok || loginData.error) {
+        setError(loginData.error ?? "Gagal login. Periksa email dan password kamu.");
         return;
       }
 
-      emailExists = checkData.exists ?? null;
+      if (!loginData.access_token || !loginData.refresh_token) {
+        setError("Gagal login. Periksa email dan password kamu.");
+        return;
+      }
 
-      const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: normalizedEmail,
-        password,
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token: loginData.access_token,
+        refresh_token: loginData.refresh_token,
       });
-      if (signInError) {
-        setError(mapLoginError(signInError.message, emailExists));
+
+      if (sessionError) {
+        setError("Login berhasil tetapi sesi gagal disimpan. Coba login lagi.");
         return;
       }
 
