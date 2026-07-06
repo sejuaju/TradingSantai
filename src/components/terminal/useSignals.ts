@@ -21,11 +21,50 @@ function belongsToUser(s: Signal, userId: string | null): boolean {
   return userId ? s.userId === userId : !s.userId;
 }
 
+function belongsToInstrument(s: Signal, instrumentId: string): boolean {
+  return !s.instrumentId || s.instrumentId === instrumentId;
+}
+
+/** Deteksi TP/SL memakai high/low bar (sama seperti backtest), bukan close saja. */
+function resolveSignalExit(
+  s: Signal,
+  barHigh: number,
+  barLow: number,
+): Signal | null {
+  if (s.type === "BUY") {
+    const hitSl = barLow <= s.sl;
+    const hitTp = barHigh >= s.tp;
+    if (hitSl && hitTp) {
+      return { ...s, status: "loss" as const, closePrice: s.sl, closeTime: Date.now() };
+    }
+    if (hitTp) {
+      return { ...s, status: "win" as const, closePrice: s.tp, closeTime: Date.now() };
+    }
+    if (hitSl) {
+      return { ...s, status: "loss" as const, closePrice: s.sl, closeTime: Date.now() };
+    }
+  } else {
+    const hitSl = barHigh >= s.sl;
+    const hitTp = barLow <= s.tp;
+    if (hitSl && hitTp) {
+      return { ...s, status: "loss" as const, closePrice: s.sl, closeTime: Date.now() };
+    }
+    if (hitTp) {
+      return { ...s, status: "win" as const, closePrice: s.tp, closeTime: Date.now() };
+    }
+    if (hitSl) {
+      return { ...s, status: "loss" as const, closePrice: s.sl, closeTime: Date.now() };
+    }
+  }
+  return null;
+}
+
 export function useSignals(
   candles: Candle[],
   htfTrend: "bullish" | "bearish" | "neutral",
   instrumentId: string,
   timeframe: string,
+  currentPrice = 0,
 ) {
   const { user, loading: authLoading } = useAuth();
   const userId = user?.id ?? null;
@@ -231,9 +270,50 @@ export function useSignals(
 
   const prevCandlesLen     = useRef(0);
   const prevCandleDuration = useRef(0);
+  const currentPriceRef    = useRef(currentPrice);
+
+  useEffect(() => {
+    currentPriceRef.current = currentPrice;
+  }, [currentPrice]);
+
+  const checkActiveExits = useCallback((barHigh: number, barLow: number) => {
+    const ownerId = userIdRef.current;
+    const instrId = instrumentRef.current;
+
+    setSignals((prev) => {
+      let changed = false;
+      const updated = prev.map((s) => {
+        if (
+          !belongsToUser(s, ownerId) ||
+          s.status !== "active" ||
+          !belongsToInstrument(s, instrId)
+        ) {
+          return s;
+        }
+
+        const resolved = resolveSignalExit(s, barHigh, barLow);
+        if (!resolved) return s;
+
+        changed = true;
+        const label = resolved.status === "win" ? "TP HIT" : "SL HIT";
+        console.log(
+          `[SIGNAL] ${resolved.status === "win" ? "✅" : "❌"} ${s.type} ${label} @ ${resolved.closePrice?.toFixed(2)} (bar ${barLow.toFixed(2)}–${barHigh.toFixed(2)})`,
+        );
+        return resolved;
+      });
+      return changed ? updated : prev;
+    });
+  }, []);
 
   useEffect(() => {
     if (candles.length < TRADING_CONFIG.MIN_CANDLES) return;
+
+    const last = candles[candles.length - 1];
+    const tick = currentPriceRef.current > 0 ? currentPriceRef.current : last.close;
+    const barHigh = Math.max(last.high, tick);
+    const barLow = Math.min(last.low, tick);
+
+    checkActiveExits(barHigh, barLow);
 
     const prevLen            = prevCandlesLen.current;
     prevCandlesLen.current   = candles.length;
@@ -250,48 +330,22 @@ export function useSignals(
       console.log(
         `[SIGNAL] 📦 ${
           isTFSwitch ? `TF switch (${prevDuration/1000}s→${candleDuration/1000}s)` : `Batch load ${candles.length} candles`
-        } — cooldown dimulai dari sekarang`
+        } — cooldown dimulai dari sekarang`,
       );
       return;
     }
 
-    const livePrice = candles[candles.length - 1].close;
-    const ownerId = userIdRef.current;
-
-    setSignals((prev) => {
-      let changed = false;
-      const updated = prev.map((s) => {
-        if (!belongsToUser(s, ownerId) || s.status !== "active") return s;
-        if (s.type === "BUY") {
-          if (livePrice >= s.tp) {
-            changed = true;
-            console.log(`[SIGNAL] ✅ BUY TP HIT @ ${livePrice.toFixed(2)}`);
-            return { ...s, status: "win" as const, closePrice: livePrice, closeTime: Date.now() };
-          }
-          if (livePrice <= s.sl) {
-            changed = true;
-            console.log(`[SIGNAL] ❌ BUY SL HIT @ ${livePrice.toFixed(2)}`);
-            return { ...s, status: "loss" as const, closePrice: livePrice, closeTime: Date.now() };
-          }
-        } else {
-          if (livePrice <= s.tp) {
-            changed = true;
-            console.log(`[SIGNAL] ✅ SELL TP HIT @ ${livePrice.toFixed(2)}`);
-            return { ...s, status: "win" as const, closePrice: livePrice, closeTime: Date.now() };
-          }
-          if (livePrice >= s.sl) {
-            changed = true;
-            console.log(`[SIGNAL] ❌ SELL SL HIT @ ${livePrice.toFixed(2)}`);
-            return { ...s, status: "loss" as const, closePrice: livePrice, closeTime: Date.now() };
-          }
-        }
-        return s;
-      });
-      return changed ? updated : prev;
-    });
-    
     runDetection();
-  }, [candles, runDetection]);
+  }, [candles, runDetection, checkActiveExits]);
+
+  useEffect(() => {
+    if (candles.length < TRADING_CONFIG.MIN_CANDLES || currentPrice <= 0) return;
+
+    const last = candles[candles.length - 1];
+    const barHigh = Math.max(last.high, currentPrice);
+    const barLow = Math.min(last.low, currentPrice);
+    checkActiveExits(barHigh, barLow);
+  }, [currentPrice, candles, checkActiveExits]);
 
   const userSignals = signals.filter((s) => belongsToUser(s, userId));
 
