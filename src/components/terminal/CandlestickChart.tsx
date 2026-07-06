@@ -172,10 +172,10 @@ function resolveScrollState(scrollOffset: number): PanState {
 function isActiveSignal(s: Signal["status"]) { return s === "active"; }
 function signalMarkerOpacity(s: Signal["status"]): number {
   if (s === "active") return 1;
-  if (s === "win")    return 0.9;
-  return 0.85;
+  if (s === "win")    return 0.58;
+  return 0.52;
 }
-const CLOSED_MARKER_OPACITY = 0.9;
+const CLOSED_MARKER_OPACITY = 0.6;
 
 function sliceVisible(candles: Candle[], visibleCount: number, historyPanInt: number): Candle[] {
   if (candles.length === 0) return [];
@@ -213,11 +213,11 @@ function HtmlEntryMarker({ xPct, wickYPct, type, status }: {
   const badgeCls = active
     ? isBuy ? "bg-green-500 shadow-[0_0_5px_rgba(34,197,94,0.4)]"
             : "bg-red-500 shadow-[0_0_5px_rgba(239,68,68,0.4)]"
-    : isBuy ? "bg-green-500/70 text-green-50"
-            : "bg-red-500/70 text-red-50";
+    : isBuy ? "bg-green-500/42 text-green-100/75"
+            : "bg-red-500/42 text-red-100/75";
   const arrowCls = active
     ? isBuy ? "text-green-400" : "text-red-400"
-    : isBuy ? "text-green-400/90" : "text-red-400/90";
+    : isBuy ? "text-green-400/55" : "text-red-400/55";
   return (
     <div className="absolute pointer-events-none z-[7] flex flex-col items-center gap-px"
       style={{
@@ -239,8 +239,8 @@ function HtmlEntryMarker({ xPct, wickYPct, type, status }: {
         </>
       )}
       {!active && (
-        <span className={`absolute -right-0.5 top-1/2 -translate-y-1/2 w-1 h-1 rounded-full border border-white/55 ${
-          status === "win" ? "bg-green-400/75" : "bg-red-400/75"
+        <span className={`absolute -right-0.5 top-1/2 -translate-y-1/2 w-1 h-1 rounded-full border border-white/40 ${
+          status === "win" ? "bg-green-400/50" : "bg-red-400/50"
         }`} />
       )}
     </div>
@@ -256,9 +256,9 @@ function HtmlExitMarker({ xPct, wickYPct, kind, type }: {
   const aboveWick = (isBuy && isTp) || (!isBuy && !isTp);
 
   const badgeCls = isTp
-    ? "bg-cyan-500/85 text-white shadow-[0_0_5px_rgba(34,211,238,0.4)]"
-    : "bg-red-500/85 text-white shadow-[0_0_5px_rgba(239,68,68,0.4)]";
-  const arrowCls = isTp ? "text-cyan-400" : "text-red-400";
+    ? "bg-cyan-500/45 text-cyan-50/80"
+    : "bg-red-500/45 text-red-50/80";
+  const arrowCls = isTp ? "text-cyan-400/55" : "text-red-400/55";
 
   return (
     <div
