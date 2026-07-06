@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { validateEmail } from "@/lib/validateEmail";
+import ForgotPasswordForm from "./ForgotPasswordForm";
 import {
   AUTH_ERROR_CLASS,
   AUTH_FORM_CLASS,
@@ -26,6 +27,11 @@ export default function LoginForm({ onSuccess, onSwitchToSignup, notice }: Login
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [emailError, setEmailError] = useState<string | null>(null);
+  const [showForgot, setShowForgot] = useState(false);
+
+  if (showForgot) {
+    return <ForgotPasswordForm onBack={() => setShowForgot(false)} />;
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -123,9 +129,18 @@ export default function LoginForm({ onSuccess, onSwitchToSignup, notice }: Login
       </div>
 
       <div>
-        <label htmlFor="login-password" className={AUTH_LABEL_CLASS}>
-          Password
-        </label>
+        <div className="flex items-center justify-between mb-1.5">
+          <label htmlFor="login-password" className={AUTH_LABEL_CLASS + " mb-0"}>
+            Password
+          </label>
+          <button
+            type="button"
+            onClick={() => setShowForgot(true)}
+            className="text-[11px] text-accent hover:text-accent-dark cursor-pointer"
+          >
+            Lupa password?
+          </button>
+        </div>
         <input
           id="login-password"
           type="password"

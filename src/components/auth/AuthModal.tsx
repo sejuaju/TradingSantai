@@ -42,6 +42,8 @@ const MODE_COPY = {
 
 const SIGNUP_SUCCESS_MSG =
   "Akun berhasil dibuat. Silakan login untuk melanjutkan.";
+const SIGNUP_CONFIRM_EMAIL_MSG =
+  "Akun dibuat. Cek email kamu untuk link konfirmasi dari Supabase, lalu login.";
 
 export default function AuthModal({ mode, onModeChange, onClose }: AuthModalProps) {
   const [insight, setInsight] = useState<AuthInsight | null>(null);
@@ -49,8 +51,8 @@ export default function AuthModal({ mode, onModeChange, onClose }: AuthModalProp
   const copy = MODE_COPY[mode];
   const isLogin = mode === "login";
 
-  function handleSignupSuccess() {
-    setLoginNotice(SIGNUP_SUCCESS_MSG);
+  function handleSignupSuccess(needsEmailConfirm: boolean) {
+    setLoginNotice(needsEmailConfirm ? SIGNUP_CONFIRM_EMAIL_MSG : SIGNUP_SUCCESS_MSG);
     onModeChange("login");
   }
 

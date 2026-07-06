@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { getSupabaseAuthRedirectUrl } from "@/lib/authRedirect";
 import { validateEmail } from "@/lib/validateEmail";
 import {
   AUTH_ERROR_CLASS,
@@ -12,7 +13,7 @@ import {
 } from "./authUi";
 
 interface SignupFormProps {
-  onSuccess?: () => void;
+  onSuccess?: (needsEmailConfirm: boolean) => void;
   onSwitchToLogin?: () => void;
 }
 
@@ -74,16 +75,18 @@ export default function SignupForm({ onSuccess, onSwitchToLogin }: SignupFormPro
 
     try {
       const trimmedName = name.trim();
-      const { error: signUpError } = await supabase.auth.signUp({
+      const { data, error: signUpError } = await supabase.auth.signUp({
         email: email.trim().toLowerCase(),
         password,
         options: {
           data: { full_name: trimmedName, name: trimmedName },
+          emailRedirectTo: getSupabaseAuthRedirectUrl("/auth/supabase/callback"),
         },
       });
       if (signUpError) throw signUpError;
       setConfirmPassword("");
-      onSuccess?.();
+      const needsEmailConfirm = !!data.user && !data.session;
+      onSuccess?.(needsEmailConfirm);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Terjadi kesalahan. Coba lagi.");
     } finally {
