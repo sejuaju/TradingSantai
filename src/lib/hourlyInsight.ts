@@ -1,7 +1,7 @@
 import { LOGIN_INSIGHTS, type AuthInsight } from "./authInsights";
 
-/** TODO: kembalikan ke `60 * 60 * 1000` setelah testing selesai */
-export const HOURLY_INTERVAL_MS = 2 * 60 * 1000;
+/** Popup check-in edukasi setiap 1 jam untuk user yang sudah login */
+export const HOURLY_INTERVAL_MS = 60 * 60 * 1000;
 
 function storageKey(userId: string) {
   return `ts_hourly_insight_${userId}`;
