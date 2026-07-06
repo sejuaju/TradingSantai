@@ -1,71 +1,80 @@
 "use client";
 
 import { useState } from "react";
-import { Lock } from "lucide-react";
+import { Lock, TrendingDown, TrendingUp } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import AuthTrigger from "@/components/auth/AuthTrigger";
 import { C, D, T } from "./shared";
 import type { Signal } from "./types";
 
-const row = (g=0): React.CSSProperties => ({ display:"flex", alignItems:"center", gap:g });
-const col = (g=0): React.CSSProperties => ({ display:"flex", flexDirection:"column", gap:g });
-const MX  = "monospace";
+const MX = "monospace";
+const row = (g = 0): React.CSSProperties => ({ display: "flex", alignItems: "center", gap: g });
+const col = (g = 0): React.CSSProperties => ({ display: "flex", flexDirection: "column", gap: g });
+
+const CARD: React.CSSProperties = {
+  borderRadius: 10,
+  background: "rgba(255,255,255,0.03)",
+  border: "1px solid rgba(255,255,255,0.08)",
+};
 
 interface Props {
-  signals       : Signal[];
-  isFullscreen ?: boolean;
+  signals: Signal[];
+  isFullscreen?: boolean;
 }
 
-// ─── Section header ───────────────────────────────────────────────────────────
-function SideLabel({ icon, text }: { icon: string; text: string }) {
+function SectionHeader({ icon, title, subtitle }: { icon: string; title: string; subtitle?: string }) {
   return (
-    <div style={{ ...row(7), marginBottom:10, paddingBottom:7,
-      borderBottom:"1px solid rgba(255,255,255,0.08)" }}>
-      <span style={{ color:C.cyan, fontSize:11 }}>{icon}</span>
-      <span style={{ fontFamily:MX, fontSize:10, fontWeight:800,
-        letterSpacing:"0.18em", textTransform:"uppercase" as const, color:T.body }}>
-        {text}
-      </span>
+    <div style={{ marginBottom: 12 }}>
+      <div style={{ ...row(8), alignItems: "center" }}>
+        <span style={{
+          width: 22, height: 22, borderRadius: 6, display: "flex",
+          alignItems: "center", justifyContent: "center",
+          background: "rgba(0,212,232,0.12)", border: "1px solid rgba(0,212,232,0.22)",
+          fontSize: 11, color: C.cyan,
+        }}>
+          {icon}
+        </span>
+        <span style={{
+          fontFamily: MX, fontSize: 11, fontWeight: 800,
+          letterSpacing: "0.14em", textTransform: "uppercase", color: T.body,
+        }}>
+          {title}
+        </span>
+      </div>
+      {subtitle && (
+        <p style={{ margin: "6px 0 0 30px", fontSize: 9, color: T.dim, lineHeight: 1.4 }}>
+          {subtitle}
+        </p>
+      )}
     </div>
   );
 }
 
-// ─── Key-value stat row ───────────────────────────────────────────────────────
-function Stat({ label, value, color = T.body }: {
-  label: string; value: string; color?: string;
-}) {
+function MetricCard({ label, value, color }: { label: string; value: string; color: string }) {
   return (
-    <div style={{ ...row(0), justifyContent:"space-between", padding:"4px 0" }}>
-      <span style={{ fontFamily:MX, fontSize:10, color:T.dim }}>{label}</span>
-      <span style={{ fontFamily:MX, fontSize:10, fontWeight:700, color }}>{value}</span>
+    <div style={{
+      ...CARD, padding: "10px 8px", textAlign: "center",
+      display: "flex", flexDirection: "column", gap: 4, alignItems: "center",
+    }}>
+      <span style={{ fontSize: 9, color: T.dim, letterSpacing: "0.1em" }}>{label}</span>
+      <span style={{ fontSize: 20, fontWeight: 800, color, fontFamily: MX, lineHeight: 1 }}>{value}</span>
     </div>
   );
 }
 
-// ─── Toggle button row ────────────────────────────────────────────────────────
-function ToggleBtn({ label, on, onClick }: {
-  label:string; on:boolean; onClick:()=>void;
-}) {
+function StatRow({ label, value, color = T.body }: { label: string; value: string; color?: string }) {
   return (
-    <button 
-      onClick={onClick} 
-      aria-pressed={on}
-      aria-label={`Toggle ${label}`}
-      style={{
-        flex:1, padding:"8px 0", borderRadius:5, border:"none", cursor:"pointer",
-        transition:"all 0.15s",
-        background: on ? `${C.cyan}22` : "rgba(255,255,255,0.07)",
-        color:      on ? C.cyan : T.sub,
-        fontFamily:MX, fontSize:10, fontWeight:700,
-        border_: on ? `1px solid ${C.cyan}44` : "1px solid rgba(255,255,255,0.10)",
-      } as React.CSSProperties}>
-      {label}
-    </button>
+    <div style={{
+      ...row(0), justifyContent: "space-between", padding: "7px 10px",
+      borderRadius: 6, background: "rgba(255,255,255,0.02)",
+    }}>
+      <span style={{ fontFamily: MX, fontSize: 10, color: T.dim }}>{label}</span>
+      <span style={{ fontFamily: MX, fontSize: 11, fontWeight: 700, color }}>{value}</span>
+    </div>
   );
 }
 
-// ─── Slider dengan label & hint (Manual) ─────────────────────────────────────
-function ManualSlider({
+function SliderField({
   label,
   hint,
   value,
@@ -90,18 +99,15 @@ function ManualSlider({
 }) {
   const pct = max > min ? ((value - min) / (max - min)) * 100 : 0;
   return (
-    <div style={{ ...col(6), opacity: disabled ? 0.45 : 1 }}>
-      <div style={{ ...row(0), justifyContent: "space-between", alignItems: "baseline" }}>
+    <div style={{ ...col(5), opacity: disabled ? 0.45 : 1 }}>
+      <div style={{ ...row(0), justifyContent: "space-between" }}>
         <span style={{ fontSize: 10, fontWeight: 700, color: T.body }}>{label}</span>
         <span style={{ fontSize: 12, fontWeight: 800, color: accent }}>{format(value)}</span>
       </div>
-      <div style={{
-        position: "relative", height: 6, borderRadius: 3,
-        background: "rgba(255,255,255,0.08)", overflow: "hidden",
-      }}>
+      <div style={{ position: "relative", height: 5, borderRadius: 99, background: "rgba(255,255,255,0.08)" }}>
         <div style={{
           position: "absolute", left: 0, top: 0, bottom: 0, width: `${pct}%`,
-          background: accent, borderRadius: 3, opacity: 0.85,
+          background: accent, borderRadius: 99,
         }} />
         <input
           type="range"
@@ -118,115 +124,131 @@ function ManualSlider({
           }}
         />
       </div>
-      <span style={{ fontSize: 9, color: T.dim, lineHeight: 1.35 }}>{hint}</span>
+      <span style={{ fontSize: 9, color: T.mute, lineHeight: 1.35 }}>{hint}</span>
     </div>
   );
 }
 
-// ─── Risk mode pill ───────────────────────────────────────────────────────────
-function RiskPill({ label, active, onClick }: {
-  label:string; active:boolean; onClick:()=>void;
+function PillButton({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
 }) {
   return (
-    <button 
+    <button
+      type="button"
       onClick={onClick}
       aria-pressed={active}
-      aria-label={`Set risk mode to ${label}`}
       style={{
-        flex:1, padding:"7px 0", borderRadius:5, cursor:"pointer",
+        flex: 1, padding: "8px 0", borderRadius: 7, cursor: "pointer",
         border: active ? `1px solid ${C.cyan}55` : "1px solid rgba(255,255,255,0.10)",
-        background: active ? `${C.cyan}18` : "rgba(255,255,255,0.04)",
-        color:  active ? C.cyan : T.sub,
-        fontFamily:MX, fontSize:10, fontWeight:700,
-      }}>
+        background: active ? "rgba(0,212,232,0.14)" : "rgba(255,255,255,0.04)",
+        color: active ? C.cyan : T.sub,
+        fontFamily: MX, fontSize: 10, fontWeight: 700,
+        transition: "all 0.15s",
+      }}
+    >
       {label}
     </button>
   );
 }
 
-// ─── Main ─────────────────────────────────────────────────────────────────────
-export function AgentSidebar({
-  signals,
-  isFullscreen = false,
-}: Props) {
+export function AgentSidebar({ signals, isFullscreen = false }: Props) {
   const { user, loading: authLoading } = useAuth();
   const canExecute = !!user;
-  const [autoOn,   setAutoOn]   = useState(false);
-  const [riskMode, setRiskMode] = useState<"NORMAL"|"SMART"|"OCA">("NORMAL");
-  const [riskPct,  setRiskPct]  = useState(90);
-  const [lotSize]               = useState(0.001);
-  const [tradeRiskPct, setTradeRiskPct] = useState(2);
-  const [rewardRatio, setRewardRatio]   = useState(2);
 
-  const win    = signals.filter(s => s.status === "win").length;
-  const loss   = signals.filter(s => s.status === "loss").length;
+  const [autoOn, setAutoOn] = useState(false);
+  const [riskMode, setRiskMode] = useState<"NORMAL" | "SMART" | "OCA">("NORMAL");
+  const [allocPct, setAllocPct] = useState(90);
+  const [lotSize] = useState(0.001);
+  const [tradeRiskPct, setTradeRiskPct] = useState(2);
+  const [rewardRatio, setRewardRatio] = useState(2);
+
+  const win = signals.filter((s) => s.status === "win").length;
+  const loss = signals.filter((s) => s.status === "loss").length;
   const closed = win + loss;
-  const wr     = closed > 0 ? Math.round((win / closed) * 100) : 0;
-  const active = signals.filter(s => s.status === "active");
+  const wr = closed > 0 ? Math.round((win / closed) * 100) : 0;
+  const active = signals.filter((s) => s.status === "active");
+
+  const panelWidth = isFullscreen ? "clamp(300px, 20vw, 400px)" : "280px";
 
   return (
-    <aside 
+    <aside
       aria-label="Panel kontrol agen trading"
-      style={{
-        width: isFullscreen ? "clamp(290px, 19vw, 380px)" : "270px",
-        flexShrink:0, background:"#08090f", borderRight:D,
-        fontFamily:MX, ...col(0), overflowY:"auto",
-        transition:"width 0.3s ease",
-      }} 
       className="no-scrollbar"
+      style={{
+        width: panelWidth,
+        flexShrink: 0,
+        background: "#08090f",
+        borderRight: D,
+        fontFamily: MX,
+        ...col(0),
+        overflowY: "auto",
+      }}
     >
+      {/* ── 1. MONITOR AGEN ─────────────────────────────────────────────── */}
+      <div style={{ padding: "14px 14px 12px" }}>
+        <SectionHeader
+          icon="●"
+          title="Monitor Agen"
+          subtitle="Ringkasan posisi dan performa sinyal saat ini"
+        />
 
-      {/* ── 1. AGENT MONITOR ─────────────────────────────────────────────── */}
-      <div style={{ padding:"14px 14px 12px" }}>
-        <SideLabel icon="●" text="Monitor Agen" />
+        <div style={{
+          ...CARD, padding: 12, marginBottom: 8,
+          background: "linear-gradient(135deg, rgba(249,115,22,0.08), rgba(255,255,255,0.02))",
+          border: "1px solid rgba(249,115,22,0.18)",
+        }}>
+          <span style={{ fontSize: 9, color: T.dim, letterSpacing: "0.1em" }}>WIN RATE</span>
+          <div style={{ ...row(8), alignItems: "baseline", marginTop: 4 }}>
+            <span style={{ fontSize: 28, fontWeight: 800, color: C.orange, lineHeight: 1 }}>
+              {closed > 0 ? `${wr}%` : "—"}
+            </span>
+            <span style={{ fontSize: 9, color: T.mute }}>
+              {closed > 0 ? `${win} menang / ${closed} selesai` : "Belum ada data"}
+            </span>
+          </div>
+        </div>
 
-        {/* Signal summary */}
-        <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr",
-          gap:6, marginBottom:8 }}>
-          {[
-            { label:"AKTIF",    val: active.length.toString(), color:C.cyan  },
-            { label:"MENANG",   val: win.toString(),           color:C.green },
-            { label:"KALAH",    val: loss.toString(),          color:C.red   },
-            { label:"WIN RATE", val: closed>0?`${wr}%`:"—",    color:C.orange},
-          ].map(s=>(
-            <div key={s.label} style={{ padding:"8px 8px", borderRadius:6,
-              background:"rgba(255,255,255,0.04)",
-              border:"1px solid rgba(255,255,255,0.08)",
-              display:"flex", flexDirection:"column" as const, gap:3, alignItems:"center" }}>
-              <span style={{ fontSize:9, color:T.dim, fontFamily:MX,
-                letterSpacing:"0.12em" }}>{s.label}</span>
-              <span style={{ fontSize:18, fontWeight:800, color:s.color,
-                fontFamily:MX, lineHeight:1 }}>{s.val}</span>
-            </div>
-          ))}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 6 }}>
+          <MetricCard label="AKTIF" value={active.length.toString()} color={C.cyan} />
+          <MetricCard label="MENANG" value={win.toString()} color={C.green} />
+          <MetricCard label="KALAH" value={loss.toString()} color={C.red} />
+          <MetricCard label="SELESAI" value={closed.toString()} color={T.sub} />
         </div>
       </div>
 
       {/* ── 2. EKSEKUSI MANUAL ──────────────────────────────────────────── */}
-      <div style={{ padding:"10px 14px", borderTop:D }}>
-        <SideLabel icon="★" text="Eksekusi Manual" />
+      <div style={{ padding: "12px 14px", borderTop: D }}>
+        <SectionHeader
+          icon="★"
+          title="Eksekusi Manual"
+          subtitle="Klik BUY / SELL dengan parameter risiko yang kamu atur"
+        />
 
         {!authLoading && !canExecute && (
           <div style={{
-            marginBottom:10, padding:"10px 12px", borderRadius:8,
-            background:"rgba(99,102,241,0.10)", border:"1px solid rgba(99,102,241,0.25)",
+            marginBottom: 10, padding: "10px 12px", borderRadius: 10,
+            background: "rgba(99,102,241,0.10)", border: "1px solid rgba(99,102,241,0.22)",
             ...col(6),
           }}>
-            <div style={{ ...row(6), alignItems:"center" }}>
-              <Lock size={12} color={C.purple} />
-              <span style={{ fontSize:10, color:T.body, fontWeight:700 }}>
-                Login diperlukan
-              </span>
+            <div style={{ ...row(6) }}>
+              <Lock size={13} color={C.purple} />
+              <span style={{ fontSize: 10, fontWeight: 700, color: T.body }}>Login diperlukan</span>
             </div>
-            <span style={{ fontSize:9, color:T.dim, lineHeight:1.45 }}>
-              Chart dan sinyal tetap terbuka. Login akun Trading Santai untuk tombol Beli/Jual manual.
+            <span style={{ fontSize: 9, color: T.dim, lineHeight: 1.45 }}>
+              Chart dan sinyal tetap terbuka. Login untuk mengaktifkan tombol BUY / SELL.
             </span>
             <AuthTrigger
               mode="login"
               style={{
-                display:"inline-block", marginTop:2, fontSize:10, fontWeight:700,
-                color:C.cyan, textDecoration:"none", background:"none", border:"none",
-                padding:0, cursor:"pointer", fontFamily:"inherit",
+                fontSize: 10, fontWeight: 700, color: C.cyan,
+                background: "none", border: "none", padding: 0,
+                cursor: "pointer", fontFamily: "inherit", textAlign: "left",
               }}
             >
               Login sekarang →
@@ -234,57 +256,57 @@ export function AgentSidebar({
           </div>
         )}
 
-        <div style={{
-          ...col(10),
-          padding:10, borderRadius:8,
-          background:"rgba(255,255,255,0.03)",
-          border:"1px solid rgba(255,255,255,0.08)",
-          opacity: canExecute ? 1 : 0.45,
-        }}>
-          <div style={{ ...row(6) }}>
+        <div style={{ ...CARD, padding: 12, ...col(10), opacity: canExecute ? 1 : 0.5 }}>
+          <div style={{ ...row(8) }}>
             <button
-              aria-label="Jual di harga saat ini"
+              type="button"
               disabled={!canExecute}
+              aria-label="SELL at current price"
               style={{
-                flex:1, padding:"11px 0", borderRadius:7, border:"none",
-                background: canExecute ? "linear-gradient(180deg,#ef4444,#dc2626)" : "#7f1d1d",
-                color:"white", fontSize:12, fontWeight:800,
-                letterSpacing:"0.06em", cursor: canExecute ? "pointer" : "not-allowed",
-                boxShadow: canExecute ? "0 4px 14px rgba(220,38,38,0.28)" : "none",
+                flex: 1, ...col(4), alignItems: "center", padding: "12px 0",
+                borderRadius: 8, border: "none", cursor: canExecute ? "pointer" : "not-allowed",
+                background: canExecute
+                  ? "linear-gradient(180deg, #ef4444, #b91c1c)"
+                  : "rgba(127,29,29,0.6)",
+                color: "#fff", boxShadow: canExecute ? "0 4px 16px rgba(220,38,38,0.25)" : "none",
               }}
             >
-              JUAL
+              <TrendingDown size={14} strokeWidth={2.5} />
+              <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: "0.12em" }}>SELL</span>
             </button>
             <button
-              aria-label="Beli di harga saat ini"
+              type="button"
               disabled={!canExecute}
+              aria-label="BUY at current price"
               style={{
-                flex:1, padding:"11px 0", borderRadius:7, border:"none",
-                background: canExecute ? "linear-gradient(180deg,#22c55e,#16a34a)" : "#14532d",
-                color:"white", fontSize:12, fontWeight:800,
-                letterSpacing:"0.06em", cursor: canExecute ? "pointer" : "not-allowed",
-                boxShadow: canExecute ? "0 4px 14px rgba(22,163,74,0.28)" : "none",
+                flex: 1, ...col(4), alignItems: "center", padding: "12px 0",
+                borderRadius: 8, border: "none", cursor: canExecute ? "pointer" : "not-allowed",
+                background: canExecute
+                  ? "linear-gradient(180deg, #22c55e, #15803d)"
+                  : "rgba(20,83,45,0.6)",
+                color: "#fff", boxShadow: canExecute ? "0 4px 16px rgba(22,163,74,0.25)" : "none",
               }}
             >
-              BELI
+              <TrendingUp size={14} strokeWidth={2.5} />
+              <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: "0.12em" }}>BUY</span>
             </button>
           </div>
 
           <div style={{
-            ...row(0), justifyContent:"space-between", alignItems:"center",
-            padding:"8px 10px", borderRadius:6,
-            background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)",
+            ...row(0), justifyContent: "space-between", alignItems: "center",
+            padding: "9px 11px", borderRadius: 8,
+            background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)",
           }}>
             <div style={col(2)}>
-              <span style={{ fontSize:9, color:T.dim, letterSpacing:"0.08em" }}>UKURAN LOT</span>
-              <span style={{ fontSize:9, color:T.mute }}>Volume per klik</span>
+              <span style={{ fontSize: 9, color: T.dim, letterSpacing: "0.08em" }}>UKURAN LOT</span>
+              <span style={{ fontSize: 9, color: T.mute }}>Volume per klik</span>
             </div>
-            <span style={{ fontSize:14, fontWeight:800, color:C.cyan }}>{lotSize}</span>
+            <span style={{ fontSize: 15, fontWeight: 800, color: C.cyan }}>{lotSize}</span>
           </div>
 
-          <ManualSlider
+          <SliderField
             label="Risiko per Trade"
-            hint="Batas kerugian maksimal jika stop loss kena (% dari modal)."
+            hint="Kerugian maksimal jika SL kena (% modal)."
             value={tradeRiskPct}
             onChange={setTradeRiskPct}
             min={0.5}
@@ -295,9 +317,9 @@ export function AgentSidebar({
             disabled={!canExecute}
           />
 
-          <ManualSlider
+          <SliderField
             label="Target Risk : Reward"
-            hint="Perbandingan jarak TP vs SL. Contoh 1:2 = TP dua kali lebih jauh dari SL."
+            hint="Jarak TP vs SL. 1:2 = TP dua kali lebih jauh."
             value={rewardRatio}
             onChange={setRewardRatio}
             min={1}
@@ -309,127 +331,163 @@ export function AgentSidebar({
           />
 
           <div style={{
-            padding:"8px 10px", borderRadius:6,
-            background:"rgba(0,212,232,0.06)", border:"1px solid rgba(0,212,232,0.14)",
-            ...col(4),
+            padding: "9px 11px", borderRadius: 8,
+            background: "rgba(0,212,232,0.06)", border: "1px solid rgba(0,212,232,0.12)",
+            fontSize: 10, color: T.sub, lineHeight: 1.5,
           }}>
-            <span style={{ fontSize:9, color:T.dim, letterSpacing:"0.06em" }}>RINGKASAN SETUP</span>
-            <span style={{ fontSize:10, color:T.sub, lineHeight:1.45 }}>
-              Risiko <strong style={{ color:C.red }}>{tradeRiskPct}%</strong> modal
-              {" · "}
-              Target <strong style={{ color:C.green }}>1:{rewardRatio}</strong>
-              {" · "}
-              Lot <strong style={{ color:C.cyan }}>{lotSize}</strong>
-            </span>
-            <span style={{ fontSize:9, color:T.mute, lineHeight:1.35 }}>
-              Tombol Beli/Jual akan memakai parameter ini saat eksekusi manual diaktifkan.
-            </span>
+            <span style={{ fontSize: 9, color: T.dim, display: "block", marginBottom: 3 }}>RINGKASAN</span>
+            Risiko <span style={{ color: C.red, fontWeight: 700 }}>{tradeRiskPct}%</span>
+            {" · "}RR <span style={{ color: C.green, fontWeight: 700 }}>1:{rewardRatio}</span>
+            {" · "}Lot <span style={{ color: C.cyan, fontWeight: 700 }}>{lotSize}</span>
           </div>
         </div>
       </div>
 
-      {/* ── 3. AUTOMATION & RISE ────────────────────────────────────────── */}
-      <div style={{ padding:"10px 14px", borderTop:D }}>
-        <SideLabel icon="⚙" text="Automation & Rise" />
+      {/* ── 3. OTOMATIS & RISIKO ────────────────────────────────────────── */}
+      <div style={{ padding: "12px 14px", borderTop: D }}>
+        <SectionHeader
+          icon="⚙"
+          title="Otomatis & Risiko"
+          subtitle="Mode strategi otomatis dan alokasi posisi"
+        />
 
-        <div style={{ ...row(0), background:"rgba(255,255,255,0.05)",
-          border:"1px solid rgba(255,255,255,0.10)", borderRadius:6,
-          padding:"7px 12px", marginBottom:8 }}>
-          <span style={{ fontSize:10, color:T.sub, flex:1 }}>TRADED EXCLUSIVE</span>
-          <span style={{ fontSize:10, fontWeight:700, color:C.cyan }}>ZBWALY9G09 ▼</span>
-        </div>
+        <div style={{ ...CARD, padding: 12, ...col(10) }}>
+          <div style={{
+            ...row(0), justifyContent: "space-between", alignItems: "center",
+            padding: "8px 10px", borderRadius: 8,
+            background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)",
+          }}>
+            <span style={{ fontSize: 10, color: T.dim }}>MODE STRATEGI</span>
+            <span style={{ fontSize: 10, fontWeight: 700, color: C.cyan }}>STANDAR ▾</span>
+          </div>
 
-        <div style={{ ...row(6), marginBottom:8 }}>
-          <ToggleBtn label={autoOn ? "ATY-ON" : "ATY-OFF"} on={autoOn}
-            onClick={() => setAutoOn(p => !p)}/>
-          <button 
-            aria-label="Configure trail settings"
-            style={{ flex:1, padding:"8px 0", borderRadius:5, cursor:"pointer",
-              border:"1px solid rgba(255,255,255,0.15)",
-              background:"rgba(255,255,255,0.04)", color:T.sub,
-              fontFamily:MX, fontSize:10, fontWeight:700 }}>TRAIL #77</button>
-        </div>
+          <div style={{ ...row(6) }}>
+            <button
+              type="button"
+              onClick={() => setAutoOn((p) => !p)}
+              aria-pressed={autoOn}
+              style={{
+                flex: 1, padding: "9px 0", borderRadius: 7, cursor: "pointer",
+                border: autoOn ? `1px solid ${C.green}55` : "1px solid rgba(255,255,255,0.10)",
+                background: autoOn ? "rgba(34,197,94,0.14)" : "rgba(255,255,255,0.04)",
+                color: autoOn ? C.green : T.sub,
+                fontFamily: MX, fontSize: 10, fontWeight: 700,
+              }}
+            >
+              {autoOn ? "OTOMATIS ON" : "OTOMATIS OFF"}
+            </button>
+            <button
+              type="button"
+              style={{
+                flex: 1, padding: "9px 0", borderRadius: 7, cursor: "pointer",
+                border: "1px solid rgba(255,255,255,0.12)",
+                background: "rgba(255,255,255,0.04)", color: T.sub,
+                fontFamily: MX, fontSize: 10, fontWeight: 700,
+              }}
+            >
+              TRAILING STOP
+            </button>
+          </div>
 
-        <div style={{ ...row(4), marginBottom:8 }}>
-          {["20","60","0"].map((n,i) => (
-            <div key={i} style={{ flex:1, textAlign:"center", padding:"6px 0",
-              background:"rgba(255,255,255,0.05)", borderRadius:4,
-              border:"1px solid rgba(255,255,255,0.10)",
-              fontSize:13, fontWeight:700, color:T.main }}>{n}</div>
-          ))}
-        </div>
+          <div style={{ ...row(6) }}>
+            {[
+              { val: "20", label: "TRAIL %" },
+              { val: "60", label: "JARAK" },
+              { val: "0", label: "OFFSET" },
+            ].map((item) => (
+              <div key={item.label} style={{
+                flex: 1, textAlign: "center", padding: "8px 4px", borderRadius: 7,
+                background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
+              }}>
+                <div style={{ fontSize: 14, fontWeight: 800, color: T.main }}>{item.val}</div>
+                <div style={{ fontSize: 8, color: T.mute, marginTop: 2, letterSpacing: "0.06em" }}>
+                  {item.label}
+                </div>
+              </div>
+            ))}
+          </div>
 
-        <div style={{ ...row(7), marginBottom:8 }}>
-          <div style={{ width:14, height:14, borderRadius:3,
-            background: autoOn ? C.green : "rgba(255,255,255,0.10)",
-            border: autoOn ? "none" : "1px solid rgba(255,255,255,0.22)",
-            flexShrink:0 }}/>
-          <span style={{ fontSize:10, color:T.sub }}>RETH HORD BRD GAT A CARGO</span>
-        </div>
+          <div style={{ ...row(8), alignItems: "center" }}>
+            <div style={{
+              width: 8, height: 8, borderRadius: "50%", flexShrink: 0,
+              background: autoOn ? C.green : "rgba(255,255,255,0.15)",
+              boxShadow: autoOn ? `0 0 8px ${C.green}` : "none",
+            }} />
+            <span style={{ fontSize: 9, color: T.dim, lineHeight: 1.4 }}>
+              Eksekusi sinyal agen otomatis saat kondisi market sesuai
+            </span>
+          </div>
 
-        <div style={{ ...row(8), marginBottom:8, alignItems:"center" }}>
-          <label htmlFor="risk-slider" style={{ fontSize:10, color:T.sub, flexShrink:0 }}>
-            WE GIVE
-          </label>
-          <input 
-            id="risk-slider"
-            type="range" 
-            min={0} 
-            max={100} 
-            value={riskPct}
-            onChange={e => setRiskPct(+e.target.value)}
-            aria-label="Risk percentage slider"
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-valuenow={riskPct}
-            style={{ flex:1, accentColor:C.purple }}/>
-          <span 
-            style={{ fontSize:13, fontWeight:800, color:C.purple, flexShrink:0 }}
-            aria-live="polite"
-          >
-            {riskPct}
-          </span>
-        </div>
+          <SliderField
+            label="Alokasi Posisi"
+            hint="Persentase kapasitas modal untuk posisi baru."
+            value={allocPct}
+            onChange={setAllocPct}
+            min={10}
+            max={100}
+            step={5}
+            format={(v) => `${v}%`}
+            accent={C.purple}
+          />
 
-        <div style={{ ...row(4) }}>
-          {(["NORMAL","SMART","OCA"] as const).map(m => (
-            <RiskPill key={m} label={m} active={riskMode===m}
-              onClick={() => setRiskMode(m)}/>
-          ))}
+          <div style={{ ...row(5) }}>
+            {(["NORMAL", "SMART", "OCA"] as const).map((m) => (
+              <PillButton
+                key={m}
+                label={m}
+                active={riskMode === m}
+                onClick={() => setRiskMode(m)}
+              />
+            ))}
+          </div>
         </div>
       </div>
 
-      {/* ── 4. FLASK MODERYON ───────────────────────────────────────────── */}
-      <div style={{ padding:"10px 14px", borderTop:D, flex:1 }}>
-        <SideLabel icon="⚡" text="Flask Moderyon (DB)" />
+      {/* ── 4. LOG PERFORMA ─────────────────────────────────────────────── */}
+      <div style={{ padding: "12px 14px 16px", borderTop: D, flex: 1 }}>
+        <SectionHeader
+          icon="⚡"
+          title="Log Performa"
+          subtitle="Statistik historis sinyal tersimpan"
+        />
 
-        <div style={{ ...row(0), justifyContent:"space-between", marginBottom:12 }}>
-          {[
-            { label:"BAKE SPEED", val: signals.length > 0 ? `${signals.length}/s` : "10/s", color:C.cyan   },
-            { label:"CHECKSUM",   val: wr > 0 ? `${wr}%` : "—",                             color:C.orange },
-          ].map(s => (
-            <div key={s.label} style={{ ...col(4), alignItems:"center" }}>
-              <span style={{ fontSize:10, color:T.dim }}>{s.label}</span>
-              <span style={{ fontSize:24, fontWeight:800, color:s.color,
-                textShadow:`0 0 14px ${s.color}44` }}>{s.val}</span>
+        <div style={{ ...CARD, padding: 12, ...col(8) }}>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <div style={{ textAlign: "center", padding: "10px 6px", borderRadius: 8, background: "rgba(0,212,232,0.06)" }}>
+              <span style={{ fontSize: 9, color: T.dim }}>KECEPATAN SINYAL</span>
+              <div style={{ fontSize: 22, fontWeight: 800, color: C.cyan, marginTop: 4 }}>
+                {signals.length > 0 ? `${signals.length}/s` : "—"}
+              </div>
             </div>
-          ))}
+            <div style={{ textAlign: "center", padding: "10px 6px", borderRadius: 8, background: "rgba(249,115,22,0.06)" }}>
+              <span style={{ fontSize: 9, color: T.dim }}>VALIDASI WR</span>
+              <div style={{ fontSize: 22, fontWeight: 800, color: C.orange, marginTop: 4 }}>
+                {closed > 0 ? `${wr}%` : "—"}
+              </div>
+            </div>
+          </div>
+
+          <div style={col(4)}>
+            <StatRow label="MENANG" value={win.toString()} color={C.green} />
+            <StatRow label="KALAH" value={loss.toString()} color={C.red} />
+            <StatRow label="AKTIF" value={active.length.toString()} color={C.cyan} />
+            <StatRow label="SELESAI" value={closed.toString()} color={T.sub} />
+          </div>
+
+          <button
+            type="button"
+            aria-label="Hapus riwayat sinyal"
+            style={{
+              width: "100%", padding: "9px 0", borderRadius: 8, cursor: "pointer",
+              border: "1px solid rgba(255,255,255,0.10)",
+              background: "rgba(255,255,255,0.05)", color: T.dim,
+              fontFamily: MX, fontSize: 10, fontWeight: 700, letterSpacing: "0.1em",
+            }}
+          >
+            HAPUS RIWAYAT
+          </button>
         </div>
-
-        <Stat label="WIN"    value={win.toString()}            color={C.green} />
-        <Stat label="LOSS"   value={loss.toString()}           color={C.red}   />
-        <Stat label="ACTIVE" value={active.length.toString()}  color={C.blue}  />
-        <Stat label="CLOSED" value={closed.toString()}         color={T.sub}   />
-
-        <button 
-          aria-label="Clear all data"
-          style={{ marginTop:12, width:"100%", padding:"8px 0",
-            borderRadius:6, border:"1px solid rgba(255,255,255,0.12)",
-            background:"rgba(255,255,255,0.06)", color:T.body,
-            fontSize:10, fontWeight:700, letterSpacing:"0.15em",
-            cursor:"pointer" }}>CLCAR</button>
       </div>
-
     </aside>
   );
 }
