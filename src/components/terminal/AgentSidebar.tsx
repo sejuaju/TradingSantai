@@ -64,6 +64,65 @@ function ToggleBtn({ label, on, onClick }: {
   );
 }
 
+// ─── Slider dengan label & hint (Manual) ─────────────────────────────────────
+function ManualSlider({
+  label,
+  hint,
+  value,
+  onChange,
+  min,
+  max,
+  step,
+  format,
+  accent,
+  disabled,
+}: {
+  label: string;
+  hint: string;
+  value: number;
+  onChange: (v: number) => void;
+  min: number;
+  max: number;
+  step: number;
+  format: (v: number) => string;
+  accent: string;
+  disabled?: boolean;
+}) {
+  const pct = max > min ? ((value - min) / (max - min)) * 100 : 0;
+  return (
+    <div style={{ ...col(6), opacity: disabled ? 0.45 : 1 }}>
+      <div style={{ ...row(0), justifyContent: "space-between", alignItems: "baseline" }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: T.body }}>{label}</span>
+        <span style={{ fontSize: 12, fontWeight: 800, color: accent }}>{format(value)}</span>
+      </div>
+      <div style={{
+        position: "relative", height: 6, borderRadius: 3,
+        background: "rgba(255,255,255,0.08)", overflow: "hidden",
+      }}>
+        <div style={{
+          position: "absolute", left: 0, top: 0, bottom: 0, width: `${pct}%`,
+          background: accent, borderRadius: 3, opacity: 0.85,
+        }} />
+        <input
+          type="range"
+          min={min}
+          max={max}
+          step={step}
+          value={value}
+          disabled={disabled}
+          onChange={(e) => onChange(+e.target.value)}
+          aria-label={label}
+          style={{
+            position: "absolute", inset: 0, width: "100%", height: "100%",
+            opacity: 0, cursor: disabled ? "not-allowed" : "pointer", margin: 0,
+          }}
+        />
+      </div>
+      <span style={{ fontSize: 9, color: T.dim, lineHeight: 1.35 }}>{hint}</span>
+    </div>
+  );
+}
+
 // ─── Risk mode pill ───────────────────────────────────────────────────────────
 function RiskPill({ label, active, onClick }: {
   label:string; active:boolean; onClick:()=>void;
@@ -95,6 +154,9 @@ export function AgentSidebar({
   const [autoOn,   setAutoOn]   = useState(false);
   const [riskMode, setRiskMode] = useState<"NORMAL"|"SMART"|"OCA">("NORMAL");
   const [riskPct,  setRiskPct]  = useState(90);
+  const [lotSize]               = useState(0.001);
+  const [tradeRiskPct, setTradeRiskPct] = useState(2);
+  const [rewardRatio, setRewardRatio]   = useState(2);
 
   const win    = signals.filter(s => s.status === "win").length;
   const loss   = signals.filter(s => s.status === "loss").length;
@@ -104,7 +166,7 @@ export function AgentSidebar({
 
   return (
     <aside 
-      aria-label="Agent control panel"
+      aria-label="Panel kontrol agen trading"
       style={{
         width: isFullscreen ? "clamp(290px, 19vw, 380px)" : "270px",
         flexShrink:0, background:"#08090f", borderRight:D,
@@ -116,16 +178,16 @@ export function AgentSidebar({
 
       {/* ── 1. AGENT MONITOR ─────────────────────────────────────────────── */}
       <div style={{ padding:"14px 14px 12px" }}>
-        <SideLabel icon="●" text="Agent Monitor" />
+        <SideLabel icon="●" text="Monitor Agen" />
 
         {/* Signal summary */}
         <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr",
           gap:6, marginBottom:8 }}>
           {[
-            { label:"ACTIVE",  val: active.length.toString(),  color:C.cyan  },
-            { label:"WIN",     val: win.toString(),             color:C.green },
-            { label:"LOSS",    val: loss.toString(),            color:C.red   },
-            { label:"WIN RATE",val: closed>0?`${wr}%`:"—",     color:C.orange},
+            { label:"AKTIF",    val: active.length.toString(), color:C.cyan  },
+            { label:"MENANG",   val: win.toString(),           color:C.green },
+            { label:"KALAH",    val: loss.toString(),          color:C.red   },
+            { label:"WIN RATE", val: closed>0?`${wr}%`:"—",    color:C.orange},
           ].map(s=>(
             <div key={s.label} style={{ padding:"8px 8px", borderRadius:6,
               background:"rgba(255,255,255,0.04)",
@@ -140,13 +202,13 @@ export function AgentSidebar({
         </div>
       </div>
 
-      {/* ── 2. MANUAL EXECUTION ─────────────────────────────────────────── */}
+      {/* ── 2. EKSEKUSI MANUAL ──────────────────────────────────────────── */}
       <div style={{ padding:"10px 14px", borderTop:D }}>
-        <SideLabel icon="★" text="Manual Execution" />
+        <SideLabel icon="★" text="Eksekusi Manual" />
 
         {!authLoading && !canExecute && (
           <div style={{
-            marginBottom:10, padding:"10px 12px", borderRadius:6,
+            marginBottom:10, padding:"10px 12px", borderRadius:8,
             background:"rgba(99,102,241,0.10)", border:"1px solid rgba(99,102,241,0.25)",
             ...col(6),
           }}>
@@ -156,8 +218,8 @@ export function AgentSidebar({
                 Login diperlukan
               </span>
             </div>
-            <span style={{ fontSize:9, color:T.dim, lineHeight:1.4 }}>
-              Chart & sinyal tetap terbuka. Login akun Trading Santai untuk BUY/SELL manual.
+            <span style={{ fontSize:9, color:T.dim, lineHeight:1.45 }}>
+              Chart dan sinyal tetap terbuka. Login akun Trading Santai untuk tombol Beli/Jual manual.
             </span>
             <AuthTrigger
               mode="login"
@@ -172,43 +234,97 @@ export function AgentSidebar({
           </div>
         )}
 
-        <div style={{ ...row(6), marginBottom:10, opacity: canExecute ? 1 : 0.45 }}>
-          <button 
-            aria-label="Sell at current price"
-            disabled={!canExecute}
-            style={{ flex:1, padding:"10px 0", borderRadius:6, border:"none",
-              background:"#dc2626", color:"white", fontSize:12, fontWeight:800,
-              letterSpacing:"0.1em", cursor: canExecute ? "pointer" : "not-allowed",
-              boxShadow: canExecute ? "0 0 14px rgba(220,38,38,0.3)" : "none" }}>SELL</button>
-          <button 
-            aria-label="Buy at current price"
-            disabled={!canExecute}
-            style={{ flex:1, padding:"10px 0", borderRadius:6, border:"none",
-              background:"#16a34a", color:"white", fontSize:12, fontWeight:800,
-              letterSpacing:"0.1em", cursor: canExecute ? "pointer" : "not-allowed",
-              boxShadow: canExecute ? "0 0 14px rgba(22,163,74,0.3)" : "none" }}>BUY</button>
-        </div>
+        <div style={{
+          ...col(10),
+          padding:10, borderRadius:8,
+          background:"rgba(255,255,255,0.03)",
+          border:"1px solid rgba(255,255,255,0.08)",
+          opacity: canExecute ? 1 : 0.45,
+        }}>
+          <div style={{ ...row(6) }}>
+            <button
+              aria-label="Jual di harga saat ini"
+              disabled={!canExecute}
+              style={{
+                flex:1, padding:"11px 0", borderRadius:7, border:"none",
+                background: canExecute ? "linear-gradient(180deg,#ef4444,#dc2626)" : "#7f1d1d",
+                color:"white", fontSize:12, fontWeight:800,
+                letterSpacing:"0.06em", cursor: canExecute ? "pointer" : "not-allowed",
+                boxShadow: canExecute ? "0 4px 14px rgba(220,38,38,0.28)" : "none",
+              }}
+            >
+              JUAL
+            </button>
+            <button
+              aria-label="Beli di harga saat ini"
+              disabled={!canExecute}
+              style={{
+                flex:1, padding:"11px 0", borderRadius:7, border:"none",
+                background: canExecute ? "linear-gradient(180deg,#22c55e,#16a34a)" : "#14532d",
+                color:"white", fontSize:12, fontWeight:800,
+                letterSpacing:"0.06em", cursor: canExecute ? "pointer" : "not-allowed",
+                boxShadow: canExecute ? "0 4px 14px rgba(22,163,74,0.28)" : "none",
+              }}
+            >
+              BELI
+            </button>
+          </div>
 
-        <div style={{ ...row(0), justifyContent:"space-between", alignItems:"center",
-          background:"rgba(255,255,255,0.05)", borderRadius:6,
-          padding:"7px 12px", border:"1px solid rgba(255,255,255,0.10)",
-          marginBottom:10, opacity: canExecute ? 1 : 0.45 }}>
-          <span style={{ fontSize:10, color:T.dim }}>TIPPLE</span>
-          <span style={{ fontSize:13, fontWeight:700, color:T.main }}>0.001</span>
-        </div>
-
-        <div style={{ ...row(8), opacity: canExecute ? 1 : 0.45 }}>
-          {[
-            { label:"GAMES", accent:C.red,   val:35 },
-            { label:"GAINS", accent:C.green, val:65 },
-          ].map(s => (
-            <div key={s.label} style={{ ...col(5), flex:1, alignItems:"center" }}>
-              <span style={{ fontSize:10, color:T.dim }}>{s.label}</span>
-              <input type="range" min={0} max={100} defaultValue={s.val}
-                disabled={!canExecute}
-                style={{ width:"100%", accentColor:s.accent }}/>
+          <div style={{
+            ...row(0), justifyContent:"space-between", alignItems:"center",
+            padding:"8px 10px", borderRadius:6,
+            background:"rgba(255,255,255,0.04)", border:"1px solid rgba(255,255,255,0.08)",
+          }}>
+            <div style={col(2)}>
+              <span style={{ fontSize:9, color:T.dim, letterSpacing:"0.08em" }}>UKURAN LOT</span>
+              <span style={{ fontSize:9, color:T.mute }}>Volume per klik</span>
             </div>
-          ))}
+            <span style={{ fontSize:14, fontWeight:800, color:C.cyan }}>{lotSize}</span>
+          </div>
+
+          <ManualSlider
+            label="Risiko per Trade"
+            hint="Batas kerugian maksimal jika stop loss kena (% dari modal)."
+            value={tradeRiskPct}
+            onChange={setTradeRiskPct}
+            min={0.5}
+            max={5}
+            step={0.5}
+            format={(v) => `${v}%`}
+            accent={C.red}
+            disabled={!canExecute}
+          />
+
+          <ManualSlider
+            label="Target Risk : Reward"
+            hint="Perbandingan jarak TP vs SL. Contoh 1:2 = TP dua kali lebih jauh dari SL."
+            value={rewardRatio}
+            onChange={setRewardRatio}
+            min={1}
+            max={5}
+            step={0.5}
+            format={(v) => `1 : ${v}`}
+            accent={C.green}
+            disabled={!canExecute}
+          />
+
+          <div style={{
+            padding:"8px 10px", borderRadius:6,
+            background:"rgba(0,212,232,0.06)", border:"1px solid rgba(0,212,232,0.14)",
+            ...col(4),
+          }}>
+            <span style={{ fontSize:9, color:T.dim, letterSpacing:"0.06em" }}>RINGKASAN SETUP</span>
+            <span style={{ fontSize:10, color:T.sub, lineHeight:1.45 }}>
+              Risiko <strong style={{ color:C.red }}>{tradeRiskPct}%</strong> modal
+              {" · "}
+              Target <strong style={{ color:C.green }}>1:{rewardRatio}</strong>
+              {" · "}
+              Lot <strong style={{ color:C.cyan }}>{lotSize}</strong>
+            </span>
+            <span style={{ fontSize:9, color:T.mute, lineHeight:1.35 }}>
+              Tombol Beli/Jual akan memakai parameter ini saat eksekusi manual diaktifkan.
+            </span>
+          </div>
         </div>
       </div>
 
