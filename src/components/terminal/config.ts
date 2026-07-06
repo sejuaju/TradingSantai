@@ -464,7 +464,7 @@ export const SAXO_CONFIG = {
   // Redirect URI — baca dari env var, fallback ke window.location
   REDIRECT_URI: typeof window !== "undefined"
     ? `${window.location.origin}/auth/callback`
-    : (process.env.NEXT_PUBLIC_SAXO_REDIRECT_URI || "http://localhost:3000/auth/callback"),
+    : (process.env.NEXT_PUBLIC_SAXO_REDIRECT_URI || "http://localhost:3001/auth/callback"),
 
   // Alias untuk backward-compatibility
   REST_API: _SAXO_IS_LIVE

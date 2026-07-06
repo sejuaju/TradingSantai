@@ -43,7 +43,7 @@ export function getSaxoRedirectUri(): string {
   if (typeof window !== "undefined") {
     return `${window.location.origin}/auth/callback`;
   }
-  return process.env.NEXT_PUBLIC_SAXO_REDIRECT_URI || "http://localhost:3000/auth/callback";
+  return process.env.NEXT_PUBLIC_SAXO_REDIRECT_URI || "http://localhost:3001/auth/callback";
 }
 
 // ─── Get Configuration from Environment ───────────────────────────────────────
