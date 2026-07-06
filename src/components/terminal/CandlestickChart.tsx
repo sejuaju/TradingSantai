@@ -23,7 +23,7 @@ interface PlacedSignal {
 interface PlacedExitMarker {
   signal: Signal;
   x: number;
-  exitY: number;
+  wickY: number;
   kind: "TP" | "SL";
 }
 
@@ -175,8 +175,7 @@ function signalMarkerOpacity(s: Signal["status"]): number {
   if (s === "win")    return 0.9;
   return 0.85;
 }
-const CLOSED_LINE_OPACITY = 0.62;
-const CLOSED_EXIT_OPACITY = 0.92;
+const CLOSED_MARKER_OPACITY = 0.9;
 
 function sliceVisible(candles: Candle[], visibleCount: number, historyPanInt: number): Candle[] {
   if (candles.length === 0) return [];
@@ -248,34 +247,46 @@ function HtmlEntryMarker({ xPct, wickYPct, type, status }: {
   );
 }
 
-function HtmlTpSlExitMarker({ xPct, yPct, kind }: {
-  xPct: number; yPct: number; kind: "TP" | "SL";
+/** Icon TP/SL di candle exit — gaya sama dengan marker BUY/SELL, tanpa garis horizontal. */
+function HtmlExitMarker({ xPct, wickYPct, kind, type }: {
+  xPct: number; wickYPct: number; kind: "TP" | "SL"; type: Signal["type"];
 }) {
+  const isBuy = type === "BUY";
   const isTp = kind === "TP";
+  const aboveWick = (isBuy && isTp) || (!isBuy && !isTp);
+
+  const badgeCls = isTp
+    ? "bg-cyan-500/85 text-white shadow-[0_0_5px_rgba(34,211,238,0.4)]"
+    : "bg-red-500/85 text-white shadow-[0_0_5px_rgba(239,68,68,0.4)]";
+  const arrowCls = isTp ? "text-cyan-400" : "text-red-400";
+
   return (
     <div
-      className="absolute pointer-events-none z-[6] flex flex-col items-center gap-px"
+      className="absolute pointer-events-none z-[7] flex flex-col items-center gap-px"
       style={{
         left: `${xPct}%`,
-        top: `${yPct}%`,
-        transform: "translate(-50%, -50%)",
-        opacity: CLOSED_EXIT_OPACITY,
+        top: `${wickYPct}%`,
+        transform: aboveWick
+          ? "translate(-50%, calc(-100% - 4px))"
+          : "translate(-50%, 4px)",
+        opacity: CLOSED_MARKER_OPACITY,
       }}
     >
-      <span
-        className={`text-[8px] font-mono font-bold px-1.5 py-0.5 rounded-sm whitespace-nowrap leading-none border shadow-sm ${
-          isTp
-            ? "bg-cyan-500/80 text-white border-cyan-300/45"
-            : "bg-red-500/80 text-white border-red-300/45"
-        }`}
-      >
-        {kind}
-      </span>
-      <span
-        className={`w-2 h-2 rounded-full border border-white/50 shadow-[0_0_4px_rgba(255,255,255,0.25)] ${
-          isTp ? "bg-cyan-400" : "bg-red-400"
-        }`}
-      />
+      {aboveWick ? (
+        <>
+          <span className={`text-[8px] font-mono font-bold px-1 py-px rounded-sm ${badgeCls} whitespace-nowrap leading-none`}>
+            {kind}
+          </span>
+          <span className={`text-[10px] leading-none font-bold ${arrowCls}`}>▼</span>
+        </>
+      ) : (
+        <>
+          <span className={`text-[10px] leading-none font-bold ${arrowCls}`}>▲</span>
+          <span className={`text-[8px] font-mono font-bold px-1 py-px rounded-sm ${badgeCls} whitespace-nowrap leading-none`}>
+            {kind}
+          </span>
+        </>
+      )}
     </div>
   );
 }
@@ -572,21 +583,25 @@ export function CandlestickChart({ candles, signals, viewKey = "default" }: Prop
       .filter((p): p is PlacedSignal => p !== null);
 
     const activeSignals = signals.filter((s) => s.status === "active");
-    const closedSignals = signals.filter((s) => s.status !== "active");
 
-    const placedExitMarkers: PlacedExitMarker[] = closedSignals
-      .filter((s) => s.closeTime && s.closeTime >= timeStart && s.closeTime <= timeEnd)
+    const placedExitMarkers: PlacedExitMarker[] = signals
+      .filter((s) => s.status !== "active" && s.closeTime && s.closeTime >= timeStart && s.closeTime <= timeEnd)
       .slice(0, 20)
       .map((signal) => {
         const candleIndex = findCandleIndex(visibleCandles, signal.closeTime!);
         if (candleIndex < 0) return null;
+        const candle = visibleCandles[candleIndex];
         const isWin = signal.status === "win";
-        const exitPrice = isWin ? signal.tp : signal.sl;
+        const kind = isWin ? ("TP" as const) : ("SL" as const);
+        const wickY =
+          (signal.type === "BUY" && isWin) || (signal.type === "SELL" && !isWin)
+            ? scaleY(candle.high)
+            : scaleY(candle.low);
         return {
           signal,
           x: candleX(candleIndex),
-          exitY: scaleY(exitPrice),
-          kind: isWin ? ("TP" as const) : ("SL" as const),
+          wickY,
+          kind,
         };
       })
       .filter((p): p is PlacedExitMarker => p !== null);
@@ -604,7 +619,7 @@ export function CandlestickChart({ candles, signals, viewKey = "default" }: Prop
       mainTop, mainH, subTop,
       volTop, volH, macdTop, macdH, macdMid,
       rsiTop, rsiH, maxVol, volSeries,
-      placedSignals, placedExitMarkers, activeSignals, closedSignals, timeTicks,
+      placedSignals, placedExitMarkers, activeSignals, timeTicks,
       visibleRangeMs,
     };
   }, [candles, signals, visibleCount, scrollOffset, priceZoom, pricePan]);
@@ -618,7 +633,7 @@ export function CandlestickChart({ candles, signals, viewKey = "default" }: Prop
     candleX, scaleY, scaleRsiY, scaleMacdY,
     ema50Points, ema200Points, rsiPoints, macdPoints, macdSigPoints, visibleHist,
     mainTop, mainH, subTop, volTop, volH, macdTop, macdH, macdMid, rsiTop, rsiH,
-    maxVol, volSeries, placedSignals, placedExitMarkers, activeSignals, closedSignals,
+    maxVol, volSeries, placedSignals, placedExitMarkers, activeSignals,
     timeTicks, visibleRangeMs,
   } = chartData;
 
@@ -717,32 +732,11 @@ export function CandlestickChart({ candles, signals, viewKey = "default" }: Prop
                   {inRange(s.tp)    && <SignalLineSvg y={scaleY(s.tp)}    color={CHART_LINES.tp}    chartAreaW={chartAreaW} />}
                 </g>
               ))}
-              {closedSignals.map((s, idx) => (
-                <g key={`lines-closed-${idx}`} opacity={CLOSED_LINE_OPACITY}>
-                  {inRange(s.price) && <SignalLineSvg y={scaleY(s.price)} color={CHART_LINES.entry} chartAreaW={chartAreaW} opacity={0.72} />}
-                  {inRange(s.sl)    && <SignalLineSvg y={scaleY(s.sl)}    color={CHART_LINES.sl}    chartAreaW={chartAreaW} opacity={0.72} />}
-                  {inRange(s.tp)    && <SignalLineSvg y={scaleY(s.tp)}    color={CHART_LINES.tp}    chartAreaW={chartAreaW} opacity={0.72} />}
-                </g>
-              ))}
-              {placedExitMarkers.map(({ x, exitY, kind }, idx) => (
-                <g key={`exit-dot-${idx}`} opacity={CLOSED_EXIT_OPACITY}>
-                  <line
-                    x1={x - candleW * 0.3} y1={exitY} x2={x + candleW * 0.3} y2={exitY}
-                    stroke={kind === "TP" ? CHART_LINES.tp : CHART_LINES.sl}
-                    strokeWidth="0.16"
-                  />
-                  <circle
-                    cx={x} cy={exitY} r={0.3}
-                    fill={kind === "TP" ? CHART_LINES.tp : CHART_LINES.sl}
-                    stroke="white" strokeWidth="0.09" opacity={0.95}
-                  />
-                </g>
-              ))}
               {placedSignals.map(({ signal, x, entryY }, idx) => {
-                const dotOp = signalMarkerOpacity(signal.status);
+                if (!isActiveSignal(signal.status)) return null;
                 const color = signal.type === "BUY" ? CHART_LINES.bullish : CHART_LINES.bearish;
                 return (
-                  <g key={`dot-${idx}`} opacity={dotOp}>
+                  <g key={`dot-${idx}`}>
                     <line x1={x} y1={entryY} x2={x + candleW * 0.28} y2={entryY}
                       stroke={color} strokeWidth="0.09" opacity="0.55" />
                     <circle cx={x} cy={entryY} r={0.26}
@@ -761,34 +755,13 @@ export function CandlestickChart({ candles, signals, viewKey = "default" }: Prop
                 {inRange(s.tp)    && <HtmlLineLabel yPct={toMainYPct(scaleY(s.tp))}    label="TP"    bgClass="bg-cyan-500" />}
               </Fragment>
             ))}
-            {closedSignals.map((s, idx) => {
-              const dimLabel = "opacity-[0.78]";
-              return (
-                <Fragment key={`labels-closed-${idx}`}>
-                  {inRange(s.price) && (
-                    <div className={dimLabel}>
-                      <HtmlLineLabel yPct={toMainYPct(scaleY(s.price))} label="ENTRY" bgClass="bg-slate-500/85" />
-                    </div>
-                  )}
-                  {inRange(s.sl) && (
-                    <div className={dimLabel}>
-                      <HtmlLineLabel yPct={toMainYPct(scaleY(s.sl))} label="SL" bgClass="bg-red-500/85" />
-                    </div>
-                  )}
-                  {inRange(s.tp) && (
-                    <div className={dimLabel}>
-                      <HtmlLineLabel yPct={toMainYPct(scaleY(s.tp))} label="TP" bgClass="bg-cyan-500/85" />
-                    </div>
-                  )}
-                </Fragment>
-              );
-            })}
-            {placedExitMarkers.map(({ x, exitY, kind }, idx) => (
-              <HtmlTpSlExitMarker
+            {placedExitMarkers.map(({ signal, x, wickY, kind }, idx) => (
+              <HtmlExitMarker
                 key={`exit-marker-${idx}`}
                 xPct={toXPct(x)}
-                yPct={toMainYPct(exitY)}
+                wickYPct={toMainYPct(wickY)}
                 kind={kind}
+                type={signal.type}
               />
             ))}
             {placedSignals.map(({ signal, x, wickY }, idx) => (
