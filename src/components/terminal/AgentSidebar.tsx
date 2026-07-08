@@ -273,7 +273,7 @@ export function AgentSidebar({ isFullscreen = false }: Props) {
         <SectionHeader
           icon={SlidersHorizontal}
           title="Otomatis & Risiko"
-          subtitle="Strategi eksekusi otomatis, trailing stop, dan alokasi modal."
+          subtitle="Trading otomatis, trailing stop, dan alokasi modal."
           accent={C.purple}
         />
 
@@ -298,10 +298,10 @@ export function AgentSidebar({ isFullscreen = false }: Props) {
             </span>
           </div>
 
-          {/* Eksekusi otomatis */}
+          {/* Mode otomatis */}
           <div style={col(6)}>
             <div style={{ ...row(0), justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: T.body }}>Eksekusi Otomatis</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: T.body }}>Mode Otomatis</span>
               <Toggle on={autoOn} onToggle={() => setAutoOn((p) => !p)} accent={C.green} />
             </div>
             <div style={{ ...row(7), alignItems: "center" }}>
@@ -314,7 +314,7 @@ export function AgentSidebar({ isFullscreen = false }: Props) {
                 }}
               />
               <span style={{ fontSize: 10, color: T.mute, lineHeight: 1.4 }}>
-                Agen otomatis mengeksekusi sinyal saat kondisi market terpenuhi.
+                Agen otomatis masuk posisi dari sinyal saat kondisi market terpenuhi.
               </span>
             </div>
           </div>
