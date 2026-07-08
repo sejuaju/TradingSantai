@@ -359,11 +359,11 @@ export function AgentSidebar({ isFullscreen = false }: Props) {
         </div>
       </div>
 
-      {/* ── EKSEKUSI MANUAL ──────────────────────────────────────────────── */}
+      {/* ── MODE MANUAL ──────────────────────────────────────────────────── */}
       <div style={{ padding: "12px 14px", borderTop: D }}>
         <SectionHeader
           icon={MousePointerClick}
-          title="Eksekusi Manual"
+          title="Mode Manual"
           subtitle="Klik BUY atau SELL — parameter risiko mengikuti pengaturan di bawah."
           accent={C.amber}
         />
@@ -381,7 +381,7 @@ export function AgentSidebar({ isFullscreen = false }: Props) {
               <span style={{ fontSize: 10, fontWeight: 700, color: T.body }}>Login diperlukan</span>
             </div>
             <span style={{ fontSize: 9, color: T.dim, lineHeight: 1.45 }}>
-              Chart dan sinyal tetap bisa dipantau. Login untuk mengaktifkan eksekusi BUY/SELL.
+              Chart dan sinyal tetap bisa dipantau. Login untuk mengaktifkan tombol BUY/SELL.
             </span>
             <AuthTrigger
               mode="login"
@@ -445,7 +445,7 @@ export function AgentSidebar({ isFullscreen = false }: Props) {
           >
             <div style={col(2)}>
               <span style={{ fontSize: 11, fontWeight: 700, color: T.body }}>Ukuran Lot</span>
-              <span style={{ fontSize: 9, color: T.mute }}>Volume per klik eksekusi.</span>
+              <span style={{ fontSize: 9, color: T.mute }}>Volume per klik order.</span>
             </div>
             <span style={{ fontSize: 15, fontWeight: 800, color: C.cyan, fontFamily: MX }}>{lotSize}</span>
           </div>

@@ -20,7 +20,7 @@ interface AuthModalProps {
 const MODE_COPY = {
   login: {
     title: "Selamat datang kembali",
-    subtitle: "Masuk untuk mengaktifkan Manual Execution dan menyimpan posisi kamu.",
+    subtitle: "Masuk untuk mengaktifkan Mode Manual dan menyimpan posisi kamu.",
     footer:
       "Setiap kali kamu login, pesan ini berbeda. Pengingat kecil agar trading tetap terukur, bukan sekadar reaksi pada market.",
     gradient:

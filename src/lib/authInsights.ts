@@ -71,7 +71,7 @@ export const SIGNUP_INSIGHTS: AuthInsight[] = [
     body:
       "Bergabung di Trading Santai berarti kamu memilih belajar bertahap, bukan mengejar " +
       "profit instan. Platform ini dirancang untuk membantumu melihat market dengan lebih " +
-      "tenang: chart, sinyal, dan eksekusi manual yang terukur. Akun member memungkinkan " +
+      "tenang: chart, sinyal, dan trading manual yang terukur. Akun member memungkinkan " +
       "posisimu tersimpan, profilmu terhubung ke monitor, dan kamu bisa kembali melanjutkan " +
       "analisis tanpa kehilangan konteks. Mulai dari fondasi yang benar lebih penting " +
       "daripada sering masuk market tanpa arah.",
@@ -105,7 +105,7 @@ export const SIGNUP_INSIGHTS: AuthInsight[] = [
     body:
       "Dengan mendaftar, kamu menyimpan identitas trading mulai dari nama, UID, dan riwayat posisi " +
       "agar setiap sesi punya kontinuitas. Ini membantu kamu mengevaluasi performa secara jujur " +
-      "tanpa mengandalkan ingatan yang sering bias. Manual Execution hanya aktif setelah login " +
+      "tanpa mengandalkan ingatan yang sering bias. Mode Manual hanya aktif setelah login " +
       "karena kami ingin setiap klik BUY/SELL datang dari keputusan sadar, bukan impuls " +
       "anonymous. Itu bukan hambatan; itu filter untuk melindungi akunmu.",
     footnote: "Profil dan posisi tersimpan. Lanjutkan analisis kapan saja tanpa mulai dari nol.",
