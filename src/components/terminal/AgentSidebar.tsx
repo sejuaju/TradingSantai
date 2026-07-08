@@ -3,15 +3,15 @@
 import { useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
+  ChevronDown,
   MousePointerClick,
   SlidersHorizontal,
   Lock,
-  TrendingDown,
-  TrendingUp,
 } from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import AuthTrigger from "@/components/auth/AuthTrigger";
 import { C, D, T } from "./shared";
+import type { Instrument } from "./config";
 import type { Signal } from "./types";
 
 const MX = "var(--font-geist-mono), ui-monospace, Menlo, monospace";
@@ -27,6 +27,127 @@ const CARD: React.CSSProperties = {
 interface Props {
   signals: Signal[];
   isFullscreen?: boolean;
+  instrument?: Instrument | null;
+  currentPrice?: number;
+}
+
+const LOT_MIN = 0.01;
+const LOT_MAX = 100;
+const LOT_STEP = 0.01;
+
+function clampLot(value: number): number {
+  const stepped = Math.round(value / LOT_STEP) * LOT_STEP;
+  return Math.min(LOT_MAX, Math.max(LOT_MIN, stepped));
+}
+
+function formatLot(value: number): string {
+  return value.toFixed(2);
+}
+
+function getPointSize(instrument?: Instrument | null): number {
+  const category = instrument?.category ?? "crypto";
+  const symbol = instrument?.symbol ?? "";
+  if (category === "forex") return symbol.includes("JPY") ? 0.001 : 0.00001;
+  if (category === "commodities") return 0.01;
+  return 0.01;
+}
+
+function getSpreadPoints(instrument?: Instrument | null): number {
+  const category = instrument?.category ?? "crypto";
+  if (category === "forex") return instrument?.symbol?.includes("JPY") ? 15 : 11;
+  if (category === "commodities") return 11;
+  if (category === "crypto") return 1;
+  return 10;
+}
+
+/** Pecah harga ala MT4: integer kecil + pip besar (mis. 62182 + 71 → 62182.71). */
+function splitQuotePrice(
+  price: number,
+  instrument?: Instrument | null,
+): { integer: string; pip: string } {
+  if (price <= 0) return { integer: "—", pip: "" };
+
+  const category = instrument?.category ?? "crypto";
+  const symbol = instrument?.symbol ?? "";
+
+  if (category === "forex" && !symbol.includes("JPY")) {
+    const [whole, fraction = ""] = price.toFixed(5).split(".");
+    return { integer: `${whole}.${fraction.slice(0, 2)}`, pip: fraction.slice(2) };
+  }
+
+  if (category === "forex" && symbol.includes("JPY")) {
+    const [whole, fraction = ""] = price.toFixed(3).split(".");
+    return { integer: whole, pip: fraction };
+  }
+
+  const [whole, fraction = ""] = price.toFixed(2).split(".");
+  return { integer: whole, pip: fraction };
+}
+
+function QuotePricePanel({
+  integer,
+  pip,
+  side,
+  disabled,
+}: {
+  integer: string;
+  pip: string;
+  side: "bid" | "ask";
+  disabled: boolean;
+}) {
+  const isBid = side === "bid";
+  const accent = isBid ? C.red : C.green;
+  const textColor = disabled ? T.mute : T.sub;
+  const pipColor = disabled ? T.dim : accent;
+
+  return (
+    <div
+      style={{
+        display: "flex",
+        alignItems: "flex-end",
+        justifyContent: "center",
+        gap: 5,
+        minHeight: 32,
+        padding: "5px 8px 4px",
+        background: disabled
+          ? "rgba(255,255,255,0.02)"
+          : isBid
+            ? "rgba(239,68,68,0.08)"
+            : "rgba(34,197,94,0.08)",
+        borderRight: isBid ? D : undefined,
+        borderLeft: !isBid ? D : undefined,
+      }}
+    >
+      <span
+        style={{
+          fontFamily: MX,
+          fontSize: 12,
+          fontWeight: 700,
+          color: textColor,
+          lineHeight: 1,
+          letterSpacing: "-0.02em",
+          paddingBottom: 1,
+        }}
+      >
+        {integer}
+      </span>
+      {pip && (
+        <span
+          style={{
+            fontFamily: MX,
+            fontSize: 20,
+            fontWeight: 800,
+            color: pipColor,
+            lineHeight: 1,
+            letterSpacing: "-0.03em",
+            paddingBottom: 1,
+          }}
+        >
+          {pip}
+        </span>
+      )}
+    </div>
+  );
 }
 
 /* ── Local building blocks ─────────────────────────────────────────────── */
@@ -207,6 +328,209 @@ function Toggle({
   );
 }
 
+function ManualOrderTicket({
+  lotSize,
+  onLotChange,
+  instrument,
+  currentPrice,
+  canExecute,
+}: {
+  lotSize: number;
+  onLotChange: (value: number) => void;
+  instrument?: Instrument | null;
+  currentPrice?: number;
+  canExecute: boolean;
+}) {
+  const pointSize = getPointSize(instrument);
+  const spreadPoints = getSpreadPoints(instrument);
+  const halfSpread = (spreadPoints * pointSize) / 2;
+  const mid = currentPrice && currentPrice > 0 ? currentPrice : 0;
+  const bid = mid > 0 ? mid - halfSpread : 0;
+  const ask = mid > 0 ? mid + halfSpread : 0;
+  const bidParts = splitQuotePrice(bid, instrument);
+  const askParts = splitQuotePrice(ask, instrument);
+  const disabled = !canExecute;
+
+  const bumpLot = (delta: number) => onLotChange(clampLot(lotSize + delta));
+
+  return (
+    <div
+      style={{
+        borderRadius: 5,
+        overflow: "hidden",
+        border: "1px solid rgba(255,255,255,0.08)",
+        opacity: disabled ? 0.55 : 1,
+        transition: "opacity 0.2s ease",
+      }}
+    >
+      {/* Baris atas: SELL | ▼ 0.05 ▼ | BUY — grid 1fr agar lebar SELL = BUY */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr auto 1fr",
+          alignItems: "stretch",
+          minHeight: 34,
+        }}
+      >
+        <button
+          type="button"
+          className="agentsb-btn"
+          disabled={disabled}
+          aria-label="SELL at bid"
+          style={{
+            width: "100%",
+            minWidth: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "0 10px",
+            border: "none",
+            borderRight: D,
+            cursor: disabled ? "not-allowed" : "pointer",
+            background: disabled
+              ? "rgba(127,29,29,0.55)"
+              : "linear-gradient(180deg, #f87171, #dc2626 55%, #b91c1c)",
+            color: "#fff",
+            boxShadow: disabled ? "none" : "0 2px 8px rgba(220,38,38,0.22)",
+            fontFamily: MX,
+            fontSize: 11,
+            fontWeight: 800,
+            letterSpacing: "0.1em",
+          }}
+        >
+          SELL
+        </button>
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "stretch",
+            flex: "0 0 auto",
+            borderRight: D,
+            background: "rgba(255,255,255,0.05)",
+          }}
+        >
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => bumpLot(-LOT_STEP)}
+            aria-label="Kurangi lot"
+            style={{
+              width: 22,
+              border: "none",
+              borderRight: D,
+              background: "rgba(255,255,255,0.03)",
+              color: T.sub,
+              cursor: disabled ? "not-allowed" : "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 0,
+            }}
+          >
+            <ChevronDown size={11} strokeWidth={2.5} />
+          </button>
+          <input
+            type="text"
+            inputMode="decimal"
+            value={formatLot(lotSize)}
+            disabled={disabled}
+            onChange={(e) => {
+              const parsed = Number.parseFloat(e.target.value.replace(",", "."));
+              if (!Number.isNaN(parsed)) onLotChange(clampLot(parsed));
+            }}
+            aria-label="Ukuran lot"
+            style={{
+              width: 48,
+              border: "none",
+              outline: "none",
+              background: "transparent",
+              color: T.main,
+              textAlign: "center",
+              fontFamily: MX,
+              fontSize: 12,
+              fontWeight: 700,
+              padding: "0 2px",
+            }}
+          />
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => bumpLot(LOT_STEP)}
+            aria-label="Tambah lot"
+            style={{
+              width: 22,
+              border: "none",
+              borderLeft: D,
+              background: "rgba(255,255,255,0.03)",
+              color: T.sub,
+              cursor: disabled ? "not-allowed" : "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              padding: 0,
+            }}
+          >
+            <ChevronDown size={11} strokeWidth={2.5} />
+          </button>
+        </div>
+
+        <button
+          type="button"
+          className="agentsb-btn"
+          disabled={disabled}
+          aria-label="BUY at ask"
+          style={{
+            width: "100%",
+            minWidth: 0,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: "0 10px",
+            border: "none",
+            cursor: disabled ? "not-allowed" : "pointer",
+            background: disabled
+              ? "rgba(20,83,45,0.55)"
+              : "linear-gradient(180deg, #4ade80, #16a34a 55%, #15803d)",
+            color: "#fff",
+            boxShadow: disabled ? "none" : "0 2px 8px rgba(22,163,74,0.22)",
+            fontFamily: MX,
+            fontSize: 11,
+            fontWeight: 800,
+            letterSpacing: "0.1em",
+          }}
+        >
+          BUY
+        </button>
+      </div>
+
+      {/* Baris bawah: dua panel biru saja — tanpa angka tengah (sesuai gambar pecahan) */}
+      <div
+        style={{
+          display: "grid",
+          gridTemplateColumns: "1fr 1fr",
+          alignItems: "stretch",
+          borderTop: "1px solid rgba(255,255,255,0.08)",
+        }}
+      >
+        <QuotePricePanel
+          integer={bidParts.integer}
+          pip={bidParts.pip}
+          side="bid"
+          disabled={disabled}
+        />
+
+        <QuotePricePanel
+          integer={askParts.integer}
+          pip={askParts.pip}
+          side="ask"
+          disabled={disabled}
+        />
+      </div>
+    </div>
+  );
+}
+
 /** Read-only value tile — used for Trailing Stop's 3 fixed parameters. */
 function ValueTile({ label, value, accent }: { label: string; value: string; accent: string }) {
   return (
@@ -231,14 +555,18 @@ function ValueTile({ label, value, accent }: { label: string; value: string; acc
 
 /* ── Main ───────────────────────────────────────────────────────────────── */
 
-export function AgentSidebar({ isFullscreen = false }: Props) {
+export function AgentSidebar({
+  isFullscreen = false,
+  instrument = null,
+  currentPrice = 0,
+}: Props) {
   const { user, loading: authLoading } = useAuth();
   const canExecute = !!user;
 
   const [autoOn, setAutoOn] = useState(false);
   const [riskMode, setRiskMode] = useState<"NORMAL" | "SMART" | "OCA">("NORMAL");
   const [allocPct, setAllocPct] = useState(90);
-  const [lotSize] = useState(0.001);
+  const [lotSize, setLotSize] = useState(0.05);
   const [tradeRiskPct, setTradeRiskPct] = useState(2);
   const [rewardRatio, setRewardRatio] = useState(2);
 
@@ -396,59 +724,14 @@ export function AgentSidebar({ isFullscreen = false }: Props) {
           </div>
         )}
 
-        <div style={{ ...CARD, padding: 12, ...col(11), opacity: canExecute ? 1 : 0.5 }}>
-          <div style={{ ...row(8) }}>
-            <button
-              type="button"
-              className="agentsb-btn"
-              disabled={!canExecute}
-              aria-label="SELL at current price"
-              style={{
-                flex: 1, ...row(5), justifyContent: "center", padding: "8px 0",
-                borderRadius: 5, border: "none", cursor: canExecute ? "pointer" : "not-allowed",
-                background: canExecute
-                  ? "linear-gradient(180deg, #f87171, #dc2626 55%, #b91c1c)"
-                  : "rgba(127,29,29,0.55)",
-                color: "#fff",
-                boxShadow: canExecute ? "0 2px 8px rgba(220,38,38,0.22)" : "none",
-              }}
-            >
-              <TrendingDown size={12} strokeWidth={2.5} />
-              <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.08em" }}>SELL</span>
-            </button>
-            <button
-              type="button"
-              className="agentsb-btn"
-              disabled={!canExecute}
-              aria-label="BUY at current price"
-              style={{
-                flex: 1, ...row(5), justifyContent: "center", padding: "8px 0",
-                borderRadius: 5, border: "none", cursor: canExecute ? "pointer" : "not-allowed",
-                background: canExecute
-                  ? "linear-gradient(180deg, #4ade80, #16a34a 55%, #15803d)"
-                  : "rgba(20,83,45,0.55)",
-                color: "#fff",
-                boxShadow: canExecute ? "0 2px 8px rgba(22,163,74,0.22)" : "none",
-              }}
-            >
-              <TrendingUp size={12} strokeWidth={2.5} />
-              <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.08em" }}>BUY</span>
-            </button>
-          </div>
-
-          <div
-            style={{
-              ...row(0), justifyContent: "space-between", alignItems: "center",
-              padding: "10px 12px", borderRadius: 9,
-              background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.07)",
-            }}
-          >
-            <div style={col(2)}>
-              <span style={{ fontSize: 11, fontWeight: 700, color: T.body }}>Ukuran Lot</span>
-              <span style={{ fontSize: 9, color: T.mute }}>Volume per klik order.</span>
-            </div>
-            <span style={{ fontSize: 15, fontWeight: 800, color: C.cyan, fontFamily: MX }}>{lotSize}</span>
-          </div>
+        <div style={{ ...CARD, padding: 12, ...col(11) }}>
+          <ManualOrderTicket
+            lotSize={lotSize}
+            onLotChange={setLotSize}
+            instrument={instrument}
+            currentPrice={currentPrice}
+            canExecute={canExecute}
+          />
 
           <SliderField
             label="Risiko per Trade"
@@ -488,7 +771,7 @@ export function AgentSidebar({ isFullscreen = false }: Props) {
             </span>
             Risiko <span style={{ color: C.red, fontWeight: 700 }}>{tradeRiskPct}%</span>
             {" · "}RR <span style={{ color: C.green, fontWeight: 700 }}>1:{rewardRatio}</span>
-            {" · "}Lot <span style={{ color: C.cyan, fontWeight: 700 }}>{lotSize}</span>
+            {" · "}Lot <span style={{ color: C.cyan, fontWeight: 700 }}>{formatLot(lotSize)}</span>
           </div>
         </div>
       </div>

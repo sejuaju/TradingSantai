@@ -369,6 +369,8 @@ export default function TradingTerminal() {
           <AgentSidebar
             signals={signals}
             isFullscreen={isFullscreen}
+            instrument={instrument}
+            currentPrice={currentPrice}
           />
         )}
 
