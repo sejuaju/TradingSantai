@@ -107,18 +107,6 @@ function BlurRow({ label, value, color = T.sub }: { label:string; value:string; 
   );
 }
 
-// ─── Summary stat row ─────────────────────────────────────────────────────────
-function Stat({ label, value, color = T.body }: { label:string; value:string; color?:string }) {
-  return (
-    <div style={{ ...row(0), justifyContent:"space-between", padding:"5px 0" }}>
-      <span style={{ fontFamily:MX, fontSize:11, color:T.dim, letterSpacing:"0.1em" }}>
-        {label}
-      </span>
-      <span style={{ fontFamily:MX, fontSize:11, fontWeight:700, color }}>{value}</span>
-    </div>
-  );
-}
-
 // ─── Leverage Selector ────────────────────────────────────────────────────────
 function LeverageSelector({ value, onChange, currentPrice, activeSignals }: {
   value:number; onChange:(v:number)=>void; currentPrice:number; activeSignals:Signal[];
@@ -321,10 +309,6 @@ export function UserMonitorSidebar({
   } = useAccountMetrics(accountSignals, currentPrice, leverage, pipSize);
 
   const active  = signals.filter(s => s.status === "active");
-  const win     = accountSignals.filter(s => s.status === "win").length;
-  const loss    = accountSignals.filter(s => s.status === "loss").length;
-  const closed  = win + loss;
-  const wr      = closed > 0 ? ((win / closed) * 100).toFixed(1) : "0.0";
 
   const fmt = (v: number) => "$" + Math.abs(v).toFixed(2);
 
@@ -455,19 +439,6 @@ export function UserMonitorSidebar({
               symbolLabel={symbolLabel}
               pipSize={pipSize} />
           ))
-        )}
-
-        {/* Summary stats */}
-        {(closed > 0 || active.length > 0) && (
-          <div style={{ marginTop:9, padding:"10px 13px", borderRadius:9,
-            background:"rgba(255,255,255,0.04)",
-            border:"1px solid rgba(255,255,255,0.08)" }}>
-            <Stat label="OPEN"     value={active.length.toString()} color={C.cyan}  />
-            <Stat label="WIN RATE" value={`${wr}%`}                 color={C.green} />
-            <Stat label="WIN"      value={win.toString()}            color={C.green} />
-            <Stat label="LOSS"     value={loss.toString()}           color={C.red}   />
-            <Stat label="TOTAL"    value={accountSignals.length.toString()} color={T.sub}   />
-          </div>
         )}
       </div>
     </div>

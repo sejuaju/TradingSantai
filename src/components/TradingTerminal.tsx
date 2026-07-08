@@ -502,9 +502,8 @@ export default function TradingTerminal() {
 
           {/* Analytics Board */}
           <AnalyticsBoard
-            signals={signals} scoreBreakdown={scoreBreakdown} candles={candles}
-            currentPrice={currentPrice} formatPrice={formatPrice}
-            selectedTf={selectedTf} htfTrend={htfTrend}
+            signals={signals}
+            scoreBreakdown={scoreBreakdown}
           />
 
           {/* Status bar */}

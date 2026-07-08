@@ -531,28 +531,6 @@ function ManualOrderTicket({
   );
 }
 
-/** Read-only value tile — used for Trailing Stop's 3 fixed parameters. */
-function ValueTile({ label, value, accent }: { label: string; value: string; accent: string }) {
-  return (
-    <div
-      style={{
-        flex: 1, textAlign: "center", padding: "8px 4px", borderRadius: 8,
-        background: `${accent}14`, border: `1px solid ${accent}28`,
-      }}
-    >
-      <div style={{ fontSize: 14, fontWeight: 800, color: T.main, fontFamily: MX, whiteSpace: "nowrap" }}>{value}</div>
-      <div
-        style={{
-          fontSize: 8, color: T.mute, marginTop: 3, letterSpacing: "0.05em",
-          whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis",
-        }}
-      >
-        {label}
-      </div>
-    </div>
-  );
-}
-
 /* ── Main ───────────────────────────────────────────────────────────────── */
 
 export function AgentSidebar({
@@ -601,7 +579,7 @@ export function AgentSidebar({
         <SectionHeader
           icon={SlidersHorizontal}
           title="Otomatis & Risiko"
-          subtitle="Trading otomatis, trailing stop, dan alokasi modal."
+          subtitle="Trading otomatis dan alokasi modal."
           accent={C.purple}
         />
 
@@ -644,16 +622,6 @@ export function AgentSidebar({
               <span style={{ fontSize: 10, color: T.mute, lineHeight: 1.4 }}>
                 Agen otomatis masuk posisi dari sinyal saat kondisi market terpenuhi.
               </span>
-            </div>
-          </div>
-
-          {/* Trailing stop — info read-only */}
-          <div style={col(6)}>
-            <span style={{ fontSize: 11, fontWeight: 700, color: T.body }}>Trailing Stop</span>
-            <div style={{ ...row(6) }}>
-              <ValueTile label="TRAIL" value="20%" accent={C.blue} />
-              <ValueTile label="AKTIVASI" value="60 poin" accent={C.blue} />
-              <ValueTile label="OFFSET" value="0 poin" accent={C.blue} />
             </div>
           </div>
 

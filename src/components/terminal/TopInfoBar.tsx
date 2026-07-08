@@ -1,7 +1,7 @@
 "use client";
 
 import type { ScoreBreakdown } from "./indicators";
-import { MAX_SCORE, getScoreColor, getScoreTier } from "./config";
+import { MAX_SCORE, getScoreColor } from "./config";
 import type { Signal } from "./types";
 
 const MX  = "monospace";
@@ -195,41 +195,81 @@ function ScoreCard({ buyScore, sellScore }: { buyScore:number; sellScore:number 
   );
 }
 
-// ─── Signal Strength Card ─────────────────────────────────────────────────────
-function StrengthCard({ pct }: { pct:number }) {
-  const { tier, label, stars, color } = getScoreTier(pct);
+// ─── Signal Performance Card (dipindah dari panel kanan) ───────────────────────
+function PerfStat({ label, value, color }: { label: string; value: string; color: string }) {
   return (
     <div style={{
-      position:"relative", overflow:"hidden", flex:1,
-      display:"flex", flexDirection:"column" as const,
-      alignItems:"center", justifyContent:"center",
-      padding:"12px 16px", borderRadius:12, gap:7,
-      background:`linear-gradient(160deg,${color}10 0%,transparent 70%)`,
-      border:`1px solid ${color}28`,
+      flex: 1,
+      display: "flex",
+      flexDirection: "column" as const,
+      alignItems: "center",
+      justifyContent: "center",
+      gap: 5,
+      minWidth: 0,
     }}>
-      <div style={{ position:"absolute", top:0, left:"15%", right:"15%", height:1.5,
-        background:`linear-gradient(90deg,transparent,${color}99,transparent)` }}/>
-      <span style={{ fontFamily:MX, fontSize:9, fontWeight:700,
-        letterSpacing:"0.18em", textTransform:"uppercase" as const, color:dim }}>
-        Signal Strength
+      <span style={{
+        fontFamily: MX,
+        fontSize: 9,
+        fontWeight: 700,
+        letterSpacing: "0.14em",
+        textTransform: "uppercase" as const,
+        color: dim,
+        whiteSpace: "nowrap" as const,
+      }}>
+        {label}
       </span>
-      <div style={{ display:"flex", alignItems:"center", gap:8 }}>
-        <span style={{ fontFamily:MX, fontSize:11, fontWeight:800,
-          padding:"2px 8px", borderRadius:5,
-          background:`${color}22`, color, border:`1px solid ${color}44`,
-          letterSpacing:"0.08em" }}>{tier}</span>
-        <span style={{ fontFamily:MX, fontSize:15, fontWeight:800, color,
-          textShadow:`0 0 12px ${color}66` }}>{label}</span>
-      </div>
-      <div style={{ display:"flex", gap:5 }}>
-        {[1,2,3,4,5].map(i => (
-          <div key={i} style={{
-            width:8, height:8, borderRadius:"50%",
-            background: i <= stars ? color : "rgba(255,255,255,0.10)",
-            boxShadow:  i <= stars ? `0 0 6px ${color}` : "none",
-          }}/>
-        ))}
-      </div>
+      <span style={{
+        fontFamily: MX,
+        fontSize: 20,
+        fontWeight: 800,
+        lineHeight: 1,
+        color,
+        textShadow: `0 0 12px ${color}44`,
+      }}>
+        {value}
+      </span>
+    </div>
+  );
+}
+
+function PerformanceCard({ signals }: { signals: Signal[] }) {
+  const open = signals.filter((s) => s.status === "active").length;
+  const win = signals.filter((s) => s.status === "win").length;
+  const loss = signals.filter((s) => s.status === "loss").length;
+  const total = signals.length;
+  const closed = win + loss;
+  const wr = closed > 0 ? ((win / closed) * 100).toFixed(1) : "0.0";
+  const color = "#a855f7";
+
+  return (
+    <div style={{
+      position: "relative",
+      overflow: "hidden",
+      flex: 1.4,
+      display: "flex",
+      alignItems: "center",
+      padding: "10px 14px",
+      borderRadius: 12,
+      background: `linear-gradient(160deg,${color}10 0%,transparent 70%)`,
+      border: `1px solid ${color}28`,
+    }}>
+      <div style={{
+        position: "absolute",
+        top: 0,
+        left: "10%",
+        right: "10%",
+        height: 1.5,
+        background: `linear-gradient(90deg,transparent,${color}99,transparent)`,
+      }} />
+      <PerfStat label="OPEN" value={open.toString()} color="#00d4e8" />
+      <div style={{ width: 1, alignSelf: "stretch", margin: "4px 6px", background: "rgba(255,255,255,0.08)" }} />
+      <PerfStat label="WIN RATE" value={`${wr}%`} color={Number(wr) >= 50 ? "#22c55e" : "#f97316"} />
+      <div style={{ width: 1, alignSelf: "stretch", margin: "4px 6px", background: "rgba(255,255,255,0.08)" }} />
+      <PerfStat label="WIN" value={win.toString()} color="#22d3ee" />
+      <div style={{ width: 1, alignSelf: "stretch", margin: "4px 6px", background: "rgba(255,255,255,0.08)" }} />
+      <PerfStat label="LOSS" value={loss.toString()} color="#f97316" />
+      <div style={{ width: 1, alignSelf: "stretch", margin: "4px 6px", background: "rgba(255,255,255,0.08)" }} />
+      <PerfStat label="TOTAL" value={total.toString()} color={color} />
     </div>
   );
 }
@@ -280,70 +320,16 @@ function BiasCard({ bias, buyScore, sellScore }: {
   );
 }
 
-// ─── Signal Activity Card ─────────────────────────────────────────────────────
-function ActivityCard({ signals }: { signals:Signal[] }) {
-  const active = signals.filter(s => s.status==="active").length;
-  const win    = signals.filter(s => s.status==="win").length;
-  const loss   = signals.filter(s => s.status==="loss").length;
-  const total  = signals.length;
-  const closed = win + loss;
-  const wr     = closed > 0 ? Math.round((win / closed) * 100) : 0;
-  const color  = "#00d4e8";
-
-  return (
-    <div style={{
-      position:"relative", overflow:"hidden", flex:1,
-      display:"flex", flexDirection:"column" as const,
-      alignItems:"center", justifyContent:"center",
-      padding:"12px 16px", borderRadius:12, gap:7,
-      background:`linear-gradient(160deg,${color}10 0%,transparent 70%)`,
-      border:`1px solid ${color}28`,
-    }}>
-      <div style={{ position:"absolute", top:0, left:"15%", right:"15%", height:1.5,
-        background:`linear-gradient(90deg,transparent,${color}99,transparent)` }}/>
-      <span style={{ fontFamily:MX, fontSize:9, fontWeight:700,
-        letterSpacing:"0.18em", textTransform:"uppercase" as const, color:dim }}>
-        Signal Activity
-      </span>
-      <div style={{ display:"flex", alignItems:"baseline", gap:5 }}>
-        {active > 0 && (
-          <div style={{ width:7, height:7, borderRadius:"50%", background:color,
-            boxShadow:`0 0 8px ${color}`, flexShrink:0,
-            animation:"pulse 2s infinite" }}/>
-        )}
-        <span style={{ fontFamily:MX, fontSize:26, fontWeight:800, color,
-          textShadow:`0 0 16px ${color}66`, lineHeight:1 }}>{active}</span>
-        <span style={{ fontFamily:MX, fontSize:12, color:dim, fontWeight:600 }}>/ {total}</span>
-      </div>
-      <div style={{ width:"100%", display:"flex", flexDirection:"column" as const, gap:4 }}>
-        <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center" }}>
-          <span style={{ fontFamily:MX, fontSize:9, color:dim, letterSpacing:"0.1em" }}>WIN RATE</span>
-          <span style={{ fontFamily:MX, fontSize:9, fontWeight:800,
-            color: wr >= 50 ? "#22c55e" : "#f97316" }}>{wr}%</span>
-        </div>
-        <div style={{ height:4, borderRadius:99, background:"rgba(255,255,255,0.07)", overflow:"hidden" }}>
-          <div style={{ height:"100%", width:`${wr}%`, borderRadius:99,
-            background: wr >= 50
-              ? "linear-gradient(90deg,#16a34a,#22c55e)"
-              : "linear-gradient(90deg,#ea580c,#f97316)" }}/>
-        </div>
-      </div>
-    </div>
-  );
-}
-
 // ─── Main ─────────────────────────────────────────────────────────────────────
 export function TopInfoBar({ scoreBreakdown, signals }: Props) {
   const { buyScore, sellScore, bias } = scoreBreakdown;
-  const pct = Math.round(Math.max(buyScore, sellScore) / MAX_SCORE * 100);
 
   return (
     <div style={{ background:"#04050c", borderBottom:D, flexShrink:0 }}>
       <div style={{ display:"flex", gap:8, padding:"10px 14px", alignItems:"stretch" }}>
         <ScoreCard buyScore={buyScore} sellScore={sellScore} />
-        <StrengthCard pct={pct} />
+        <PerformanceCard signals={signals} />
         <BiasCard bias={bias} buyScore={buyScore} sellScore={sellScore} />
-        <ActivityCard signals={signals} />
       </div>
     </div>
   );
